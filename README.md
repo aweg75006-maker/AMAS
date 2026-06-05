@@ -7,10 +7,10 @@
 ### 演示截图
 
 #### 1. 系统主界面
-![AMAS 主界面](./docs/demo1.jpeg)
+![AMAS 主界面](./docs/demo1.png)
 
 #### 2. 报告生成效果
-![AMAS 报告生成](./docs/demo2.jpeg)
+![AMAS 报告生成](./docs/demo2.png)
 
 ---
 
