@@ -13,3 +13,5 @@ backend/app/rag/chroma_db/
 *.md
 !README.md
 backend/app/rag/chroma_db_turns/
+package-lock.json
+frontend/package-lock.json
