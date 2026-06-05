@@ -37,12 +37,16 @@ def review_node(state: AgentState):
     report = state["final_report"]
 
     num = state.get("revision_number", 0)
-    
 
-    response = llm.invoke(REVIEW_PROMPT.format(query=query, report=report))
+    # Phase 4: 预算执行
+    from app.utils.budget_enforcer import create_enforcer_from_state
+    enforcer = create_enforcer_from_state(state)
+
+    prompt_text = REVIEW_PROMPT.format(query=query, report=report)
+    response, _ = enforcer.wrap_llm_call("reviewer", llm, prompt_text, state)
     raw = response.content
     content = _clean_json_text(raw)
-    
+
     result = None
     try:
         result = json.loads(content)
@@ -55,7 +59,10 @@ def review_node(state: AgentState):
         用户问题：{query}
         报告：{report}
         '''
-        retry_raw = llm.invoke(retry_prompt).content
+        retry_raw, _ = enforcer.wrap_llm_call(
+            "reviewer", llm, retry_prompt, state
+        )
+        retry_raw = retry_raw.content
         retry_content = _clean_json_text(retry_raw)
         try:
             result = json.loads(retry_content)

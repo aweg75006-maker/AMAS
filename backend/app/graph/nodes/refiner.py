@@ -56,7 +56,10 @@ def refine_node(state: AgentState):
     4. 直接输出修改后的完整报告，不要有任何前言后语。
     """
 
-    response = llm.invoke([HumanMessage(content=prompt)])
+    # Phase 4: 预算执行
+    from app.utils.budget_enforcer import create_enforcer_from_state
+    enforcer = create_enforcer_from_state(state)
+    response, _ = enforcer.wrap_llm_call("refiner", llm, prompt, state)
     new_report = response.content
 
     return {

@@ -73,7 +73,13 @@ def route_query(state: AgentState):
     只输出 "NEW_TOPIC" 或 "REFINE"。
     """
 
-    result = router_llm.invoke([HumanMessage(content=prompt)]).content.strip().upper()
+    # Phase 4: 预算执行
+    from app.utils.budget_enforcer import create_enforcer_from_state
+    enforcer = create_enforcer_from_state(state)
+    response, _ = enforcer.wrap_llm_call(
+        "router", router_llm, prompt, state
+    )
+    result = response.content.strip().upper()
     print(f"--- [Router] LLM 判定结果: {result} ---")
 
     if result == "REFINE":

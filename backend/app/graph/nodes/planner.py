@@ -40,11 +40,14 @@ def plan_node(state: AgentState):
         else:
             memory_context = "（这是第一个研究任务，无历史脉络）"
 
-    response = llm.invoke(PLAN_PROMPT.format(
-        query=query,
-        critique=critique,
-        memory_context=memory_context,
-    ))
+    # Phase 4: 预算执行
+    from app.utils.budget_enforcer import create_enforcer_from_state
+    enforcer = create_enforcer_from_state(state)
+    prompt_text = PLAN_PROMPT.format(
+        query=query, critique=critique, memory_context=memory_context,
+    )
+    response, _ = enforcer.wrap_llm_call("planner", llm, prompt_text, state)
+
     plans = [p.strip() for p in response.content.split(",")]
     return {"plan": plans}
 

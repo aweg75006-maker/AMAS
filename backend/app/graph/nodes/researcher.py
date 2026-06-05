@@ -38,7 +38,13 @@ def research_node(state: AgentState):
                 
                 只输出 "YES" 或 "NO"，不要输出其他内容。
                 """
-                grade = llm.invoke([HumanMessage(content=grader_prompt)]).content.strip().upper()
+                # Phase 4: 预算执行（文档相关性审计）
+                from app.utils.budget_enforcer import create_enforcer_from_state
+                enforcer = create_enforcer_from_state(state)
+                response, _ = enforcer.wrap_llm_call(
+                    "researcher", llm, grader_prompt, state
+                )
+                grade = response.content.strip().upper()
                 if "YES" in grade:
                     is_doc_relevant = True
                     rag_content = "\n\n".join([f"[文档片段]: {doc.page_content}" for doc in docs])

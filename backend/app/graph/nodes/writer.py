@@ -52,11 +52,15 @@ def write_node(state: AgentState):
                     parts.append(f"  结论: {report[-200:]}")
             memory_context = "\n".join(parts)
 
-    response = llm.invoke(WRITE_PROMPT.format(
+    # Phase 4: 预算执行
+    from app.utils.budget_enforcer import create_enforcer_from_state
+    enforcer = create_enforcer_from_state(state)
+    prompt_text = WRITE_PROMPT.format(
         query=query,
         content=content,
         critique_section=critique_section,
         memory_context=memory_context,
-    ))
+    )
+    response, _ = enforcer.wrap_llm_call("writer", llm, prompt_text, state)
 
     return {"final_report": response.content}
