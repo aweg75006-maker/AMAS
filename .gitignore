@@ -12,7 +12,3 @@ backend/app/rag/chroma_db/
 # 只保留根目录 README.md，忽略其他所有 md 文件
 *.md
 !README.md
-
-# 只保留根目录 README.md，忽略其他所有 md 文件
-*.md
-!README.md
