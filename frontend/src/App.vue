@@ -33,6 +33,24 @@
             </span>
           </div>
         </div>
+
+        <!-- Phase 2: 会话信息 + 操作按钮 -->
+        <div class="flex items-center gap-3">
+          <div v-if="sessionTurnCount > 0" class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-full text-xs text-blue-700 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            {{ sessionTurnCount }} turn{{ sessionTurnCount > 1 ? 's' : '' }}
+          </div>
+          <div class="hidden sm:block text-[10px] text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded">
+            {{ sessionId ? sessionId.substring(0, 12) + '...' : '...' }}
+          </div>
+          <button
+            @click="handleNewSession"
+            class="px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors uppercase tracking-wide"
+            title="Start new research session"
+          >
+            + New
+          </button>
+        </div>
       </div>
     </header>
 
@@ -206,8 +224,8 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue';
-import { uploadFiles, streamChat, clearContext } from './services/api';
+import { ref, computed, nextTick, onMounted } from 'vue';
+import { uploadFiles, streamChat, clearContext, getOrCreateSessionId, getCurrentSessionId, clearSession, getSessionInfo } from './services/api';
 import StatusFlow from './components/StatusFlow.vue';
 import MarkdownIt from 'markdown-it';
 // 【修复步骤 1】引入数学公式插件 (必须先 npm install markdown-it-katex)
@@ -245,6 +263,52 @@ const searchMode = ref('hybrid');
 // 打字机变量
 const displayedReport = ref('');
 const isTyping = ref(false);
+
+// ─── 会话管理（Phase 2 新增）───
+const sessionId = ref(null);
+const sessionTurnCount = ref(0);
+const sessionHistory = ref(null);  // { episodic, semantic, window_k, ... }
+const showHistory = ref(false);
+
+// 页面加载时初始化会话
+onMounted(async () => {
+  sessionId.value = await getOrCreateSessionId();
+  logs.value.push(`[SESSION] Loaded session: ${sessionId.value}`);
+  // 加载会话历史
+  await loadSessionHistory();
+});
+
+async function loadSessionHistory() {
+  if (!sessionId.value) return;
+  try {
+    const info = await getSessionInfo(sessionId.value);
+    sessionTurnCount.value = info.turns_count || 0;
+    logs.value.push(`[SESSION] Turns: ${sessionTurnCount.value}, Budget: ${(info.total_actual_tokens || 0).toLocaleString()} tokens`);
+  } catch (e) {
+    console.warn('Failed to load session info:', e);
+  }
+}
+
+async function handleNewSession() {
+  await clearSession();
+  sessionId.value = await getOrCreateSessionId();
+  sessionTurnCount.value = 0;
+  sessionHistory.value = null;
+  displayedReport.value = '';
+  logs.value = [];
+  logs.value.push(`[SESSION] New session: ${sessionId.value}`);
+}
+
+function handleSessionEvent(data) {
+  if (data.session_id && data.session_id !== sessionId.value) {
+    sessionId.value = data.session_id;
+  }
+  sessionTurnCount.value = data.turn_number || sessionTurnCount.value;
+  if (data.window_stats) {
+    logs.value.push(`[SESSION] Turn #${data.turn_number} | Window K=${data.window_stats.window_k} | ` +
+      `Episodic: ${data.window_stats.episodic_count}, Semantic: ${data.window_stats.semantic_count}`);
+  }
+}
 
 // 【修复步骤 3】增强渲染逻辑：把后端返回的 \[...\] 替换成插件能识别的 $$...$$
 const renderedReport = computed(() => {
@@ -356,6 +420,12 @@ const startResearch = async () => {
             query.value,
             actualMode,
             (data) => {
+                    // Phase 2: 处理会话事件
+                    if (data.step === '__session__') {
+                        handleSessionEvent(data.data);
+                        return;
+                    }
+
                     // 1. 同步后端当前步骤
                     if (data.step) currentStep.value = data.step;
 
@@ -425,13 +495,20 @@ const startResearch = async () => {
                 isLoading.value = false;
                 currentStep.value = 'done';
                 logs.value.push('[DONE] Process complete.');
+                // 刷新会话历史（异步，不阻塞）
+                loadSessionHistory();
                 scrollToBottom();
             },
             (err) => {
                 isLoading.value = false;
                 logs.value.push(`[ERROR] ${err.message}`);
                 scrollToBottom();
-            }
+            },
+            (sessionData) => {
+                // onSession callback
+                handleSessionEvent(sessionData);
+            },
+            sessionId.value  // 传入当前会话 ID
         );
     } catch (e) {
         isLoading.value = false;
