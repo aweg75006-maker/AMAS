@@ -12,6 +12,7 @@ backend/app/rag/chroma_db/
 # 只保留根目录 README.md，忽略其他所有 md 文件
 *.md
 !README.md
+!docs/ENTERPRISE_DEVELOPMENT_PLAN.md
 backend/app/rag/chroma_db_turns/
 package-lock.json
 frontend/package-lock.json
