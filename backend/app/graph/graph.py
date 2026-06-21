@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+from app.core.logging import get_logger
 from app.graph.state import AgentState
 from app.graph.nodes.planner import plan_node
 from app.graph.nodes.researcher import research_node
@@ -8,6 +9,8 @@ import json
 from app.graph.nodes.router import route_query
 from app.graph.nodes.refiner import refine_node
 
+logger = get_logger("iris.graph")
+
 def route_after_research(state: AgentState):
     """
     Researcher 结束后的交通指挥员。
@@ -15,7 +18,7 @@ def route_after_research(state: AgentState):
     """
 
     if state.get("should_stop", False):
-        print("--- [路由] 检测到停止信号 (should_stop=True) -> 🛑 提前结束任务 ---")
+        logger.info("research_requested_stop")
         return END  
     else:
 
@@ -29,17 +32,26 @@ def should_continue(state: AgentState):
  
     current_revision = state.get("revision_number", 0)
     if current_revision >= 3:
-        print("--- [路由] 已达到最大重试次数，强制结束 ---")
+        logger.warning(
+            "review_max_revisions_reached",
+            extra={"revision_number": current_revision},
+        )
         return END
 
     review_status = state.get("review_status", "PASS")
     critique = state.get("critique", "")
     
     if review_status == "FAIL":
-        print(f"--- [路由] 审查未通过 (意见: {critique}) -> 返回规划节点 ---")
+        logger.info(
+            "review_failed_routing_to_planner",
+            extra={
+                "revision_number": current_revision,
+                "critique_length": len(critique),
+            },
+        )
         return "planner" 
     else:
-        print("--- [路由] 审查通过 -> 结束 ---")
+        logger.info("review_passed")
         return END
 
 def create_graph(memory=None):

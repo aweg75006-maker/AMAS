@@ -91,7 +91,11 @@ class CrossTurnRetriever:
         if self._embeddings is None:
             try:
                 from langchain_community.embeddings import DashScopeEmbeddings
-                self._embeddings = DashScopeEmbeddings(model="text-embedding-v4")
+                from app.core.config import settings
+                self._embeddings = DashScopeEmbeddings(
+                    model="text-embedding-v4",
+                    dashscope_api_key=settings.require_dashscope_api_key(),
+                )
             except Exception:
                 # 降级到 HuggingFace
                 from langchain_huggingface import HuggingFaceEmbeddings

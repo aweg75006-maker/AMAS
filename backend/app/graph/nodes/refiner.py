@@ -1,8 +1,8 @@
-from langchain_core.messages import HumanMessage
+from app.core.logging import get_logger
 from app.graph.state import AgentState
 from app.utils.llm import get_llm
 
-llm = get_llm()
+logger = get_logger("iris.graph.refiner")
 
 def _find_latest_report(state: AgentState) -> str:
     """查找最近的报告——当前 state 或跨轮记忆。"""
@@ -19,7 +19,10 @@ def refine_node(state: AgentState):
     query = state["query"]               # 修改指令，例如 "把第一章改详细点"
     old_report = _find_latest_report(state)
 
-    print(f"--- [Refiner] 正在根据指令修改报告: {query} ---")
+    logger.info(
+        "refiner_started",
+        extra={"query_length": len(query), "old_report_length": len(old_report)},
+    )
 
     # Phase 2: 注入跨轮记忆上下文
     memory_context = state.get("memory_context", "")
@@ -59,8 +62,9 @@ def refine_node(state: AgentState):
     # Phase 4: 预算执行
     from app.utils.budget_enforcer import create_enforcer_from_state
     enforcer = create_enforcer_from_state(state)
-    response, _ = enforcer.wrap_llm_call("refiner", llm, prompt, state)
+    response, _ = enforcer.wrap_llm_call("refiner", get_llm(), prompt, state)
     new_report = response.content
+    logger.info("refiner_completed", extra={"new_report_length": len(new_report)})
 
     return {
         "final_report": new_report,

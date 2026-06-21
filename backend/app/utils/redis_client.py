@@ -13,21 +13,21 @@ Key Schema（遵循架构设计文档 6.2 节）：
     checkpoint:{thread_id}:{ns} → String
 """
 
-import os
 import json
 import asyncio
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 import logging
+from app.core.config import settings
 
 logger = logging.getLogger("iris.redis")
 
 # ─── 配置 ───
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() in ("1", "true", "yes")
-SESSION_TTL = int(os.getenv("REDIS_SESSION_TTL", "604800"))  # 7 天
-TURN_FULL_TTL = int(os.getenv("REDIS_TURN_FULL_TTL", "259200"))  # 3 天
-CHECKPOINT_TTL = int(os.getenv("REDIS_CHECKPOINT_TTL", "604800"))  # 7 天
+REDIS_URL = settings.redis_url
+REDIS_ENABLED = settings.redis_enabled
+SESSION_TTL = settings.redis_session_ttl  # 7 天
+TURN_FULL_TTL = settings.redis_turn_full_ttl  # 3 天
+CHECKPOINT_TTL = settings.redis_checkpoint_ttl  # 7 天
 
 
 class RedisNotAvailableError(Exception):
@@ -163,6 +163,7 @@ class RedisClient:
             self._connected = True
             logger.info(f"Redis 连接成功: {self.url}")
         except Exception as e:
+            self._client = None
             logger.warning(
                 f"Redis 不可用 ({e})，降级到内存存储。"
                 f"提示: 启动 Redis Server 或在 .env 中设置 REDIS_ENABLED=false 来消除此警告。"
@@ -174,7 +175,10 @@ class RedisClient:
         """关闭连接。"""
         if self._client:
             try:
-                await self._client.close()
+                if hasattr(self._client, "aclose"):
+                    await self._client.aclose()
+                else:
+                    await self._client.close()
             except Exception:
                 pass
             self._client = None

@@ -1,5 +1,6 @@
 import os
 import shutil
+from functools import lru_cache
 from typing import Any, List, Optional
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core import vectorstores
@@ -9,13 +10,17 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
+from app.core.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger("iris.rag")
 
 try:
     from sentence_transformers import CrossEncoder
 except ImportError:
     CrossEncoder = None
 
-RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2" # Cross-Encoder 重排序模型
+RERANKER_MODEL_NAME = settings.rag_reranker_model # Cross-Encoder 重排序模型
 _reranker = None
 
 def get_reranker():
@@ -59,14 +64,18 @@ class RerankRetriever(BaseRetriever):
         return top_docs
 
 # 定义数据存储路径
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "chroma_db")   # 数据库文件存这里
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads") # 用户上传的 PDF 存这里
+DB_PATH = str(settings.rag_chroma_db_path)   # 数据库文件存这里
+UPLOAD_DIR = str(settings.rag_upload_dir) # 用户上传的 PDF 存这里
 
 
-# embeddings = HuggingFaceEmbeddings(model_name="moka-ai/m3e-base")
-# 这里用的是阿里云的词嵌入模型，需要配置环境变量，不行的话可以用上面的
-embeddings = DashScopeEmbeddings(model='text-embedding-v4')
+@lru_cache
+def get_embeddings():
+    # embeddings = HuggingFaceEmbeddings(model_name="moka-ai/m3e-base")
+    # 这里用的是阿里云的词嵌入模型，需要配置环境变量，不行的话可以用上面的
+    return DashScopeEmbeddings(
+        model=settings.rag_embedding_model,
+        dashscope_api_key=settings.require_dashscope_api_key(),
+    )
 
 def reset_knowledge_base():
     """
@@ -78,21 +87,24 @@ def reset_knowledge_base():
         try:
             shutil.rmtree(UPLOAD_DIR)
         except Exception as e:
-            print(f"--- [RAG] 清理上传目录警告: {e} ---")
+            logger.warning("rag_upload_dir_cleanup_failed", exc_info=True)
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-    print("--- [RAG] 正在重置知识库数据... ---")
+    logger.info("rag_reset_started")
     try:
         if os.path.exists(DB_PATH):
-            vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
+            vectorstore = Chroma(
+                persist_directory=DB_PATH,
+                embedding_function=get_embeddings(),
+            )
             try:
                 vectorstore.delete_collection()
-                print("--- [RAG] 知识库 Collection 已删除 (数据已清空) ---")
+                logger.info("rag_collection_deleted")
             except Exception:
                 pass
     except Exception as e:
-        print(f"--- [RAG] 重置数据库时遇到非致命错误 (不影响使用): {e} ---")
+        logger.warning("rag_reset_nonfatal_error", exc_info=True)
 
 def process_documents(file_paths: List[str]):
     """
@@ -102,28 +114,31 @@ def process_documents(file_paths: List[str]):
     all_splits = []
     
     for file_path in file_paths:
-        print(f"--- [RAG] 正在处理文档: {os.path.basename(file_path)} ---")
+        logger.info("rag_document_processing_started", extra={"filename": os.path.basename(file_path)})
         try:
             loader = PyPDFLoader(file_path) # 只提取文本层
             docs = loader.load()
             
             text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=500,
-                chunk_overlap=50
+                chunk_size=settings.rag_chunk_size,
+                chunk_overlap=settings.rag_chunk_overlap
             )
             splits = text_splitter.split_documents(docs)
             all_splits.extend(splits)
         except Exception as e:
-            print(f"❌ 处理文件 {file_path} 失败: {e}")
+            logger.exception(
+                "rag_document_processing_failed",
+                extra={"filename": os.path.basename(file_path)},
+            )
     
     if all_splits:
-        print(f"--- [RAG] 正在将 {len(all_splits)} 个片段写入向量数据库... ---")
+        logger.info("rag_vector_write_started", extra={"split_count": len(all_splits)})
         Chroma.from_documents(
             documents=all_splits,
-            embedding=embeddings,
+            embedding=get_embeddings(),
             persist_directory=DB_PATH
         )
-        print("--- [RAG] 写入完成 ---")
+        logger.info("rag_vector_write_completed", extra={"split_count": len(all_splits)})
     
     return len(all_splits)
 
@@ -133,9 +148,11 @@ def get_retriever():
     """
     if not os.path.exists(DB_PATH) or not os.listdir(DB_PATH):
         return None
-    vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
-    top_k = 5
-    fetch_k = 20
+    vectorstore = Chroma(
+        persist_directory=DB_PATH,
+        embedding_function=get_embeddings(),
+    )
+    top_k = settings.rag_top_k
+    fetch_k = settings.rag_fetch_k
     reranker = get_reranker()
     return RerankRetriever(vectorstore=vectorstore, reranker=reranker, top_k=top_k, fetch_k=fetch_k)
-

@@ -1,8 +1,9 @@
 from langchain_core.prompts import ChatPromptTemplate
+from app.core.logging import get_logger
 from app.utils.llm import get_llm
 from app.graph.state import AgentState
 
-llm = get_llm()
+logger = get_logger("iris.graph.writer")
 
 WRITE_PROMPT = ChatPromptTemplate.from_template(
     """你是一个专业的技术撰稿人。
@@ -22,9 +23,16 @@ WRITE_PROMPT = ChatPromptTemplate.from_template(
 )
 
 def write_node(state: AgentState):
-    print("--- [节点] 正在撰写报告 ---")
     query = state["query"]
     content = "\n\n".join(state["search_results"])
+    logger.info(
+        "writer_started",
+        extra={
+            "query_length": len(query),
+            "search_result_count": len(state.get("search_results", [])),
+            "content_length": len(content),
+        },
+    )
 
     critique = state.get("critique", "")
     critique_section = ""
@@ -61,6 +69,7 @@ def write_node(state: AgentState):
         critique_section=critique_section,
         memory_context=memory_context,
     )
-    response, _ = enforcer.wrap_llm_call("writer", llm, prompt_text, state)
+    response, _ = enforcer.wrap_llm_call("writer", get_llm(), prompt_text, state)
 
+    logger.info("writer_completed", extra={"report_length": len(response.content)})
     return {"final_report": response.content}

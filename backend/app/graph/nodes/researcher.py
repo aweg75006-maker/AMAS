@@ -1,10 +1,11 @@
-from langchain_core.messages import HumanMessage
+from app.core.logging import get_logger
 from app.tools.search import search_tavily
 from app.graph.state import AgentState
 from app.rag.engine import get_retriever
 from app.utils.llm import get_llm
 
-llm = get_llm(model_type="smart")
+logger = get_logger("iris.graph.researcher")
+
 def research_node(state: AgentState):
 
     mode = state.get("search_mode", "hybrid")
@@ -12,19 +13,25 @@ def research_node(state: AgentState):
     plans = state["plan"]
     results = []
 
-    print(f"--- [Researcher] 开始搜索 | 模式: {mode} ---")
+    logger.info(
+        "researcher_started",
+        extra={"search_mode": mode, "query_length": len(query), "plan_count": len(plans)},
+    )
     
     retriever = get_retriever()
     rag_content = ""
     is_doc_relevant = False
     
     if retriever:
-        print("--- [RAG] 正在检索本地知识库... ---")
+        logger.info("rag_retrieval_started")
         try:
             docs = retriever.invoke(query)
             if docs:
                 raw_context = "\n\n".join([f"[文档片段]: {doc.page_content}" for doc in docs])
-                print("--- [RAG] 正在进行文档相关性审计... ---")
+                logger.info(
+                    "rag_relevance_grading_started",
+                    extra={"doc_count": len(docs), "raw_context_length": len(raw_context)},
+                )
                 grader_prompt = f"""
                 你是一个严格的文档相关性评估员。
                 
@@ -42,32 +49,35 @@ def research_node(state: AgentState):
                 from app.utils.budget_enforcer import create_enforcer_from_state
                 enforcer = create_enforcer_from_state(state)
                 response, _ = enforcer.wrap_llm_call(
-                    "researcher", llm, grader_prompt, state
+                    "researcher", get_llm(model_type="smart"), grader_prompt, state
                 )
                 grade = response.content.strip().upper()
                 if "YES" in grade:
                     is_doc_relevant = True
                     rag_content = "\n\n".join([f"[文档片段]: {doc.page_content}" for doc in docs])
                     results.append(f"### 📂 本地文档资料 (已核实相关)\n{rag_content}\n")
-                    print("--- [RAG] ✅ 文档通过相关性审计 ---")
+                    logger.info("rag_relevance_passed", extra={"grade": grade})
                 else:
-                    print(f"--- [RAG] ⚠️ 警告：文档内容与问题 '{query}' 不相关，已自动忽略 ---")
+                    logger.warning("rag_relevance_failed", extra={"grade": grade})
 
                     results.append(f"[系统提示]: 检索了本地文档，但发现内容与问题不相关，已自动忽略。")
             else:
-                print("--- [RAG] 未找到相关内容 ---")
+                logger.info("rag_no_documents_found")
         except Exception as e:
-            print(f"--- [RAG] 检索出错: {e} ---")
+            logger.exception("rag_retrieval_failed")
     else:
-        print("--- [RAG] 知识库为空，跳过 ---")
+        logger.info("rag_retriever_empty")
     
     if mode == "document":
         if is_doc_relevant:
-            print("--- [策略] 文档相关，按计划仅使用文档 ---")
+            logger.info("document_only_relevant")
         else:
-            print("--- [策略] 文档不相关，但这又是 Document Only 模式 ---")
-            print("[WARNING] 文档内容与问题不匹配，无法生成有效回答") 
+            logger.warning("document_only_irrelevant")
             results.append("【严重警告】：用户选择了 Document Only 模式，但上传的文档与问题完全无关。请直接在报告中诚实地告诉用户：“您上传的文档中没有关于此问题的说明”，不要编造答案。")
+            logger.info(
+                "researcher_completed",
+                extra={"result_count": len(results), "should_stop": True},
+            )
             return {
                 "search_results": results,
                 "should_stop": True 
@@ -79,21 +89,24 @@ def research_node(state: AgentState):
         
         if is_doc_relevant:
 
-            print("--- [策略] 文档相关，启用混合增强模式 (Doc + Web) ---")
+            logger.info("hybrid_doc_relevant")
         else:
 
-            print("--- [策略] 文档不相关，自动切换为全网搜索模式 (Auto-Web) ---")
-            print("[WARNING] 本地文档与问题无关，系统已自动切换为全网搜索") # 触发前端弹窗
+            logger.warning("hybrid_doc_irrelevant_auto_web")
 
         if should_web_search:
-            print("--- [Web] 正在执行互联网搜索... ---")
+            logger.info("web_search_started", extra={"plan_count": len(plans)})
             for q in plans:
                 try:
                     content = search_tavily(q)
                     results.append(f"### 🌐 网络搜索结果 ({q})\n{content}\n")
                 except Exception as e:
-                    print(f"--- [Web] 搜索 {q} 失败: {e} ---")
+                    logger.exception("web_search_failed", extra={"query_length": len(q)})
             
+    logger.info(
+        "researcher_completed",
+        extra={"result_count": len(results), "should_stop": False},
+    )
     return {"search_results": results}
 
 # 测试

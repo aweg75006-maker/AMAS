@@ -1,9 +1,8 @@
-from langchain_core.messages import HumanMessage
+from app.core.logging import get_logger
 from app.graph.state import AgentState
 from app.utils.llm import get_llm
 
-# 用一个小模型即可，速度快
-router_llm = get_llm()
+logger = get_logger("iris.graph.router")
 
 # 兜底策略，防止模型抽疯不按要求输出
 def looks_like_refine(q: str) -> bool:
@@ -48,10 +47,14 @@ def route_query(state: AgentState):
     turn_number = state.get("turn_number", 1)
     episodic_count = len(state.get("episodic_memory", []))
 
-    print(
-        f"--- [Router] 正在分析意图: '{query[:80]}' "
-        f"(已有报告: {has_report}, Turn #{turn_number}, "
-        f"历史记忆: {episodic_count} turns) ---"
+    logger.info(
+        "route_query_started",
+        extra={
+            "query_length": len(query),
+            "has_report": has_report,
+            "turn_number": turn_number,
+            "episodic_count": episodic_count,
+        },
     )
 
     # 既没有当前报告也没有历史报告 → 一定是新课题
@@ -77,15 +80,15 @@ def route_query(state: AgentState):
     from app.utils.budget_enforcer import create_enforcer_from_state
     enforcer = create_enforcer_from_state(state)
     response, _ = enforcer.wrap_llm_call(
-        "router", router_llm, prompt, state
+        "router", get_llm(), prompt, state
     )
     result = response.content.strip().upper()
-    print(f"--- [Router] LLM 判定结果: {result} ---")
+    logger.info("route_query_llm_result", extra={"route_result": result})
 
     if result == "REFINE":
         return "refiner"
     if result == "NEW_TOPIC":
         return "planner"
     # 兜底：模型没按要求输出
-    print(f"--- [Router][WARN] 非法输出: {result!r}，启用兜底规则 ---")
+    logger.warning("route_query_invalid_llm_result", extra={"route_result": result})
     return "refiner" if looks_like_refine(query) else "planner"

@@ -1,10 +1,10 @@
 import json
 from langchain_core.prompts import ChatPromptTemplate
-from sqlalchemy import exc
+from app.core.logging import get_logger
 from app.utils.llm import get_llm
 from app.graph.state import AgentState
 
-llm = get_llm(model_type="smart")
+logger = get_logger("iris.graph.reviewer")
 
 
 REVIEW_PROMPT = ChatPromptTemplate.from_template(
@@ -32,9 +32,12 @@ def _clean_json_text(s: str) -> str:
     return s
 
 def review_node(state: AgentState):
-    print("--- [节点] 正在审查报告质量 ---")
     query = state["query"]
     report = state["final_report"]
+    logger.info(
+        "reviewer_started",
+        extra={"query_length": len(query), "report_length": len(report)},
+    )
 
     num = state.get("revision_number", 0)
 
@@ -43,7 +46,8 @@ def review_node(state: AgentState):
     enforcer = create_enforcer_from_state(state)
 
     prompt_text = REVIEW_PROMPT.format(query=query, report=report)
-    response, _ = enforcer.wrap_llm_call("reviewer", llm, prompt_text, state)
+    reviewer_llm = get_llm(model_type="smart")
+    response, _ = enforcer.wrap_llm_call("reviewer", reviewer_llm, prompt_text, state)
     raw = response.content
     content = _clean_json_text(raw)
 
@@ -60,7 +64,7 @@ def review_node(state: AgentState):
         报告：{report}
         '''
         retry_raw, _ = enforcer.wrap_llm_call(
-            "reviewer", llm, retry_prompt, state
+            "reviewer", reviewer_llm, retry_prompt, state
         )
         retry_raw = retry_raw.content
         retry_content = _clean_json_text(retry_raw)
@@ -68,12 +72,26 @@ def review_node(state: AgentState):
             result = json.loads(retry_content)
         except Exception as e2:
             # 兜底策略
-            print(f"--- [Reviewer][WARN] JSON解析失败，fail-closed。raw={raw!r} retry_raw={retry_raw!r} ---")
+            logger.warning(
+                "reviewer_json_parse_failed",
+                extra={
+                    "raw_length": len(raw or ""),
+                    "retry_raw_length": len(retry_raw or ""),
+                },
+            )
             result = {
                 "status": "FAIL",
                 "feedback": "审查器输出格式异常（未返回合法JSON）。请按要求重写报告，并确保内容充分回答问题且结构清晰；如资料不足请明确说明并提出需要补充检索的点。"
             }
 
+    logger.info(
+        "reviewer_completed",
+        extra={
+            "review_status": result.get("status", "FAIL"),
+            "feedback_length": len(result.get("feedback", "")),
+            "revision_number": num + 1,
+        },
+    )
     return {
         "critique": result.get("feedback",""),
         "revision_number": num + 1,

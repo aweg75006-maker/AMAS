@@ -1,8 +1,9 @@
 from langchain_core.prompts import ChatPromptTemplate
+from app.core.logging import get_logger
 from app.utils.llm import get_llm
 from app.graph.state import AgentState
 
-llm = get_llm()
+logger = get_logger("iris.graph.planner")
 
 
 PLAN_PROMPT = ChatPromptTemplate.from_template(
@@ -22,9 +23,12 @@ PLAN_PROMPT = ChatPromptTemplate.from_template(
 )
 
 def plan_node(state: AgentState):
-    print("--- [节点] 正在规划搜索路径 ---")
     query = state["query"]
     critique = state.get("critique", "")
+    logger.info(
+        "planner_started",
+        extra={"query_length": len(query), "critique_length": len(critique)},
+    )
 
     # Phase 2: 注入跨轮记忆上下文
     memory_context = state.get("memory_context", "")
@@ -46,9 +50,10 @@ def plan_node(state: AgentState):
     prompt_text = PLAN_PROMPT.format(
         query=query, critique=critique, memory_context=memory_context,
     )
-    response, _ = enforcer.wrap_llm_call("planner", llm, prompt_text, state)
+    response, _ = enforcer.wrap_llm_call("planner", get_llm(), prompt_text, state)
 
     plans = [p.strip() for p in response.content.split(",")]
+    logger.info("planner_completed", extra={"plan_count": len(plans)})
     return {"plan": plans}
 
 # def test():
