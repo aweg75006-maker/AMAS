@@ -1,6 +1,7 @@
 from langgraph.graph import StateGraph, END
 from app.core.logging import get_logger
 from app.graph.state import AgentState
+from app.graph.runtime import wrap_node
 from app.graph.nodes.planner import plan_node
 from app.graph.nodes.researcher import research_node
 from app.graph.nodes.writer import write_node
@@ -58,11 +59,11 @@ def create_graph(memory=None):
 
     workflow = StateGraph(AgentState)
 
-    workflow.add_node("planner", plan_node)
-    workflow.add_node("researcher", research_node)
-    workflow.add_node("writer", write_node)
-    workflow.add_node("reviewer", review_node)
-    workflow.add_node("refiner", refine_node)
+    workflow.add_node("planner", wrap_node("planner", plan_node))
+    workflow.add_node("researcher", wrap_node("researcher", research_node))
+    workflow.add_node("writer", wrap_node("writer", write_node))
+    workflow.add_node("reviewer", wrap_node("reviewer", review_node))
+    workflow.add_node("refiner", wrap_node("refiner", refine_node))
 
     # START -> planner -> researcher -> writer -> reviewer -> END/planner
     workflow.set_conditional_entry_point(

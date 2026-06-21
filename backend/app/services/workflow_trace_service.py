@@ -105,6 +105,38 @@ class WorkflowTraceService:
         await self.repository.save_node_run(node_run)
         return node_run
 
+    async def record_node_failure(
+        self,
+        *,
+        run: WorkflowRunRecord,
+        node_name: str,
+        error_code: str,
+        error_message: str,
+        duration_ms: int = 0,
+        attempts: int = 1,
+    ) -> WorkflowNodeRunRecord:
+        now = time.time()
+        started_at = now - max(duration_ms, 0) / 1000
+        node_run = WorkflowNodeRunRecord(
+            node_run_id=f"node_{uuid4().hex[:16]}",
+            run_id=run.run_id,
+            node_name=node_name,
+            tenant_id=run.tenant_id,
+            session_id=run.session_id,
+            turn_id=run.turn_id,
+            status=WorkflowNodeStatus.FAILED.value,
+            started_at=started_at,
+            finished_at=now,
+            duration_ms=duration_ms,
+            input_summary=self._summarize_text(run.query),
+            output_summary="",
+            error_code=error_code,
+            error_message=error_message[:1000],
+            metadata={"attempts": attempts},
+        )
+        await self.repository.save_node_run(node_run)
+        return node_run
+
     async def record_error_event(
         self,
         *,

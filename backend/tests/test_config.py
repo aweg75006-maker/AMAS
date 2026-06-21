@@ -22,6 +22,8 @@ def test_safe_summary_masks_secrets():
     assert "jwt_secret_configured" in summary
     assert "rate_limit_enabled" in summary
     assert "rate_limit_login_capacity" in summary
+    assert "workflow_node_timeout_seconds" in summary
+    assert "workflow_node_max_retries" in summary
 
 
 def test_missing_required_secrets_raise_configuration_error():

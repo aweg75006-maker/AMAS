@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     rate_limit_default_capacity: int = 60
     rate_limit_default_refill_per_second: float = 1
 
+    workflow_node_timeout_seconds: float = 120
+    workflow_node_max_retries: int = 1
+    workflow_retry_backoff_seconds: float = 1.0
+
     total_token_budget: int = 128_000
 
     rag_chroma_db_path: Path = Field(default=APP_DIR / "rag" / "chroma_db")
@@ -136,6 +140,9 @@ class Settings(BaseSettings):
             "rate_limit_login_capacity": self.rate_limit_login_capacity,
             "rate_limit_chat_capacity": self.rate_limit_chat_capacity,
             "rate_limit_upload_capacity": self.rate_limit_upload_capacity,
+            "workflow_node_timeout_seconds": self.workflow_node_timeout_seconds,
+            "workflow_node_max_retries": self.workflow_node_max_retries,
+            "workflow_retry_backoff_seconds": self.workflow_retry_backoff_seconds,
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),

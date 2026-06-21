@@ -14,6 +14,7 @@ from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.graph.graph import create_graph
+from app.graph.runtime import WorkflowNodeExecutionError
 from app.models.domain import WorkflowRunStatus
 from app.services.chat_history_service import persist_completed_chat_turn
 from app.services.knowledge_base_service import get_knowledge_base_service
@@ -174,22 +175,42 @@ async def chat_endpoint(
             )
 
         except Exception as e:
+            error_code = "CHAT_STREAM_FAILED"
+            node_name = ""
+            attempts = 1
+            duration_ms = 0
+            if isinstance(e, WorkflowNodeExecutionError):
+                error_code = e.error_code
+                node_name = e.node_name
+                attempts = e.attempts
+                duration_ms = e.duration_ms
             logger.exception(
                 "chat_stream_failed",
                 extra={
                     "request_id": request_id,
                     "session_id": session_id,
                     "turn_id": turn_id,
+                    "error_code": error_code,
+                    "node_name": node_name,
                 },
             )
+            if node_name:
+                await trace_service.record_node_failure(
+                    run=workflow_run,
+                    node_name=node_name,
+                    error_code=error_code,
+                    error_message=str(e),
+                    duration_ms=duration_ms,
+                    attempts=attempts,
+                )
             await trace_service.finish_run(
                 workflow_run,
                 status=WorkflowRunStatus.FAILED.value,
-                error_code="CHAT_STREAM_FAILED",
+                error_code=error_code,
                 error_message=str(e),
             )
             await trace_service.record_error_event(
-                error_code="CHAT_STREAM_FAILED",
+                error_code=error_code,
                 message="任务执行失败",
                 source="workflow",
                 context=context,
@@ -197,12 +218,13 @@ async def chat_endpoint(
                 session_id=session_id,
                 turn_id=turn_id,
                 run_id=workflow_run.run_id,
+                node_name=node_name,
                 path=str(http_request.url.path),
                 status_code=500,
-                details={"reason": str(e)},
+                details={"reason": str(e), "attempts": attempts},
             )
             yield sse_error_event(
-                code="CHAT_STREAM_FAILED",
+                code=error_code,
                 message="任务执行失败",
                 request_id=request_id,
                 details={"reason": str(e), "session_id": session_id, "turn_id": turn_id},
