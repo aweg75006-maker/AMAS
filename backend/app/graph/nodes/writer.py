@@ -1,26 +1,9 @@
-from langchain_core.prompts import ChatPromptTemplate
 from app.core.logging import get_logger
+from app.harness.registry import get_harness_node, get_prompt_template
 from app.utils.llm import get_llm
 from app.graph.state import AgentState
 
 logger = get_logger("iris.graph.writer")
-
-WRITE_PROMPT = ChatPromptTemplate.from_template(
-    """你是一个专业的技术撰稿人。
-    基于以下的调研资料，回答用户的问题：{query}
-
-    调研资料：
-    {content}
-    审查意见（如果有）：
-    {critique_section}
-
-    历史研究脉络（跨轮记忆）：
-    {memory_context}
-
-    不能捏造事实，每个结论都要对应资料里的证据点。
-    请写一份结构清晰、有深度的调研报告，且文章题目很有水平，并且能吸引人，使用 Markdown 格式。
-    """
-)
 
 def write_node(state: AgentState):
     query = state["query"]
@@ -63,7 +46,8 @@ def write_node(state: AgentState):
     # Phase 4: 预算执行
     from app.utils.budget_enforcer import create_enforcer_from_state
     enforcer = create_enforcer_from_state(state)
-    prompt_text = WRITE_PROMPT.format(
+    harness_node = get_harness_node("writer")
+    prompt_text = get_prompt_template(harness_node.prompt_id).format(
         query=query,
         content=content,
         critique_section=critique_section,

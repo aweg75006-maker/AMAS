@@ -76,6 +76,7 @@ class Settings(BaseSettings):
     workflow_version: str = "workflow.v1"
     prompt_version: str = "prompt.v1"
     node_policy_version: str = "node-policy.v1"
+    harness_manifest: str = "default_research.json"
 
     total_token_budget: int = 128_000
 
@@ -146,9 +147,12 @@ class Settings(BaseSettings):
             "workflow_node_timeout_seconds": self.workflow_node_timeout_seconds,
             "workflow_node_max_retries": self.workflow_node_max_retries,
             "workflow_retry_backoff_seconds": self.workflow_retry_backoff_seconds,
+            "tool_default_timeout_seconds": self.workflow_node_timeout_seconds,
+            "tool_default_max_retries": self.workflow_node_max_retries,
             "workflow_version": self.workflow_version,
             "prompt_version": self.prompt_version,
             "node_policy_version": self.node_policy_version,
+            "harness_manifest": self.harness_manifest,
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),

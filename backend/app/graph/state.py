@@ -62,6 +62,9 @@ class AgentState(TypedDict, total=False):
         session_id, turn_id, turn_number,
         episodic_memory, semantic_memory,
         budget_state, token_usage_current_turn, token_usage_session_total
+
+    内部观测字段（可选）：
+        _tool_runs
     """
 
     # ─── 原有字段 ───
@@ -79,6 +82,11 @@ class AgentState(TypedDict, total=False):
     session_id: str                 # 持久化会话 ID（服务端生成）
     turn_id: str                    # 当前 Turn 的唯一标识
     turn_number: int                # 会话内第几个 Turn
+    tenant_id: str                  # 当前租户 ID
+    user_id: str                    # 当前用户 ID
+    username: str                   # 当前用户名
+    request_id: str                 # 当前请求 ID
+    workflow_run_id: str            # 当前工作流执行 ID
 
     # 分层记忆
     episodic_memory: List[TurnRecordDict]     # 最近 K 个 Turn（完整记录）
@@ -89,3 +97,4 @@ class AgentState(TypedDict, total=False):
     budget_state: BudgetStateDict             # 当前预算快照
     token_usage_current_turn: TokenUsageDict  # 当前 Turn 累计
     token_usage_session_total: TokenUsageDict  # 会话累计
+    _tool_runs: List[Dict[str, Any]]           # 当前节点产生的工具调用快照

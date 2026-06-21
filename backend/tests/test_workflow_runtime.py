@@ -20,7 +20,7 @@ async def test_wrap_node_retries_then_succeeds(monkeypatch):
             raise RuntimeError("temporary")
         return {"final_report": "ok"}
 
-    wrapped = wrap_node("writer", flaky_node)
+    wrapped = wrap_node("test_node", flaky_node)
     result = await wrapped({"query": "hello"})
 
     assert result["final_report"] == "ok"
@@ -39,11 +39,11 @@ async def test_wrap_node_raises_after_timeout(monkeypatch):
         time.sleep(0.2)
         return {"final_report": "late"}
 
-    wrapped = wrap_node("writer", slow_node)
+    wrapped = wrap_node("test_node", slow_node)
 
     with pytest.raises(WorkflowNodeExecutionError) as exc:
         await wrapped({"query": "hello"})
 
-    assert exc.value.node_name == "writer"
+    assert exc.value.node_name == "test_node"
     assert exc.value.error_code == "WORKFLOW_NODE_TIMEOUT"
     assert exc.value.attempts == 1

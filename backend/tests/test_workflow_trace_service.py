@@ -39,6 +39,21 @@ async def test_workflow_trace_service_records_run_node_and_error():
             started_at=run.started_at,
             token_usage={"estimated": 1},
         )
+        await service.record_tool_run(
+            run=run,
+            node_name="researcher",
+            tool_snapshot={
+                "tool_name": "web.search",
+                "status": "failed",
+                "started_at": run.started_at,
+                "finished_at": run.started_at + 0.1,
+                "duration_ms": 100,
+                "input_summary": "trace query",
+                "error_code": "TOOL_FAILED",
+                "error_message": "network error",
+                "metadata": {"attempts": 2},
+            },
+        )
         await service.finish_run(run, status=WorkflowRunStatus.SUCCEEDED.value)
         await service.record_error_event(
             error_code="TRACE_TEST_ERROR",
@@ -56,12 +71,15 @@ async def test_workflow_trace_service_records_run_node_and_error():
         errors = await service.list_error_events("tenant_trace", limit=20)
 
         assert result is not None
-        restored_run, nodes = result
+        restored_run, nodes, tools = result
         assert restored_run.status == WorkflowRunStatus.SUCCEEDED.value
         assert restored_run.metadata["workflow_version"]
         assert restored_run.metadata["prompt_version"]
         assert nodes[0].node_name == "writer"
         assert nodes[0].metadata["runtime"]["node_policy_version"]
+        assert tools[0].tool_name == "web.search"
+        assert tools[0].status == "failed"
+        assert tools[0].metadata["attempts"] == 2
         assert any(event.error_code == "TRACE_TEST_ERROR" for event in errors)
     finally:
         await repository.close()

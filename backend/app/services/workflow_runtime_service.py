@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.config import settings
+from app.harness.registry import harness_fingerprint
 
 
 def workflow_runtime_fingerprint() -> dict[str, object]:
@@ -10,6 +11,7 @@ def workflow_runtime_fingerprint() -> dict[str, object]:
         "workflow_version": settings.workflow_version,
         "prompt_version": settings.prompt_version,
         "node_policy_version": settings.node_policy_version,
+        "harness": harness_fingerprint(),
         "models": {
             "fast": settings.llm_fast_model,
             "smart": settings.llm_smart_model,

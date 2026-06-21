@@ -1,0 +1,60 @@
+{
+  "workflow_id": "research_report",
+  "workflow_version": "workflow.v1",
+  "prompt_version": "prompt.v1",
+  "node_policy_version": "node-policy.v1",
+  "nodes": {
+    "planner": {
+      "prompt_id": "planner.research.v1",
+      "model_type": "fast",
+      "timeout_seconds": 120,
+      "max_retries": 1
+    },
+    "researcher": {
+      "model_type": "smart",
+      "timeout_seconds": 180,
+      "max_retries": 1,
+      "tools": [
+        {
+          "name": "rag.retrieve",
+          "timeout_seconds": 30,
+          "max_retries": 1,
+          "input_schema": "query:string, knowledge_base_id:string",
+          "output_schema": "documents:list"
+        },
+        {
+          "name": "rag.relevance_grade",
+          "timeout_seconds": 45,
+          "max_retries": 1,
+          "input_schema": "query:string, document_context:string",
+          "output_schema": "grade:YES|NO"
+        },
+        {
+          "name": "web.search",
+          "timeout_seconds": 45,
+          "max_retries": 1,
+          "input_schema": "query:string",
+          "output_schema": "content:string"
+        }
+      ]
+    },
+    "writer": {
+      "prompt_id": "writer.report.v1",
+      "model_type": "fast",
+      "timeout_seconds": 120,
+      "max_retries": 1
+    },
+    "reviewer": {
+      "prompt_id": "reviewer.quality.v1",
+      "model_type": "smart",
+      "timeout_seconds": 120,
+      "max_retries": 1
+    },
+    "refiner": {
+      "prompt_id": "refiner.report.v1",
+      "model_type": "fast",
+      "timeout_seconds": 120,
+      "max_retries": 1
+    }
+  }
+}

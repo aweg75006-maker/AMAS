@@ -1,26 +1,9 @@
-from langchain_core.prompts import ChatPromptTemplate
 from app.core.logging import get_logger
+from app.harness.registry import get_harness_node, get_prompt_template
 from app.utils.llm import get_llm
 from app.graph.state import AgentState
 
 logger = get_logger("iris.graph.planner")
-
-
-PLAN_PROMPT = ChatPromptTemplate.from_template(
-    """你是一个专业的调研助手。
-    针对用户的问题：{query}
-    请生成 3-5 个简短的搜索子问题，用于在 Google 上查找相关信息。
-    已有审查意见（如果有）：{critique}
-    如果存在审查意见，请务必针对意见中提到的缺失信息生成关键词。
-
-    历史研究脉络（之前已经研究过的方向和结论）：
-    {memory_context}
-
-    如果历史研究中有与当前问题相关的内容，请利用已有知识规划搜索方向，避免重复搜索已研究透彻的子问题。
-    只返回关键词，用逗号分隔，不要有其他废话。
-    例如：子问题1, 子问题2, 子问题3
-    """
-)
 
 def plan_node(state: AgentState):
     query = state["query"]
@@ -47,7 +30,8 @@ def plan_node(state: AgentState):
     # Phase 4: 预算执行
     from app.utils.budget_enforcer import create_enforcer_from_state
     enforcer = create_enforcer_from_state(state)
-    prompt_text = PLAN_PROMPT.format(
+    harness_node = get_harness_node("planner")
+    prompt_text = get_prompt_template(harness_node.prompt_id).format(
         query=query, critique=critique, memory_context=memory_context,
     )
     response, _ = enforcer.wrap_llm_call("planner", get_llm(), prompt_text, state)

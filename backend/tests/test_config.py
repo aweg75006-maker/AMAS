@@ -27,6 +27,7 @@ def test_safe_summary_masks_secrets():
     assert "workflow_version" in summary
     assert "prompt_version" in summary
     assert "node_policy_version" in summary
+    assert "harness_manifest" in summary
 
 
 def test_missing_required_secrets_raise_configuration_error():

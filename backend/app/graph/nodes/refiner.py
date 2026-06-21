@@ -1,5 +1,6 @@
 from app.core.logging import get_logger
 from app.graph.state import AgentState
+from app.harness.registry import get_harness_node, get_prompt_template
 from app.utils.llm import get_llm
 
 logger = get_logger("iris.graph.refiner")
@@ -39,25 +40,12 @@ def refine_node(state: AgentState):
         else:
             memory_context = "（无历史研究记录）"
 
-    prompt = f"""
-    你是一个专业的报告编辑。
-
-    【历史研究脉络】
-    {memory_context}
-
-    【原始报告】
-    {old_report}
-
-    【用户修改指令】
-    {query}
-
-    请根据用户的指令，对原始报告进行修改。
-    注意：
-    1. 保持原有的 Markdown 结构。
-    2. 只修改用户要求的部分，其余部分尽量保持原汁原味。
-    3. 如果指令涉及引用之前的研究，请参考上述历史研究脉络。
-    4. 直接输出修改后的完整报告，不要有任何前言后语。
-    """
+    harness_node = get_harness_node("refiner")
+    prompt = get_prompt_template(harness_node.prompt_id).format(
+        memory_context=memory_context,
+        old_report=old_report,
+        query=query,
+    )
 
     # Phase 4: 预算执行
     from app.utils.budget_enforcer import create_enforcer_from_state

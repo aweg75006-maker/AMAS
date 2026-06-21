@@ -94,6 +94,10 @@ async def chat_endpoint(
             request_id=request_id,
             metadata={"thread_id": request.thread_id or turn_id},
         )
+        initial_state["workflow_run_id"] = workflow_run.run_id
+        initial_state["request_id"] = request_id
+        initial_state["user_id"] = context.user_id
+        initial_state["username"] = context.username
 
         logger.info(
             "chat_started",
@@ -129,9 +133,35 @@ async def chat_endpoint(
                             started_at=node_started_at,
                             token_usage=ledger.snapshot().__dict__,
                         )
+                        for tool_snapshot in state_update.get("_tool_runs", []):
+                            tool_run = await trace_service.record_tool_run(
+                                run=workflow_run,
+                                node_name=node_name,
+                                tool_snapshot=tool_snapshot,
+                            )
+                            if tool_run.status == "failed":
+                                await trace_service.record_error_event(
+                                    error_code=tool_run.error_code or "TOOL_FAILED",
+                                    message=f"工具调用失败：{tool_run.tool_name}",
+                                    source="tool",
+                                    context=context,
+                                    request_id=request_id,
+                                    session_id=session_id,
+                                    turn_id=turn_id,
+                                    run_id=workflow_run.run_id,
+                                    node_name=node_name,
+                                    path=str(http_request.url.path),
+                                    status_code=500,
+                                    details={
+                                        "tool_run_id": tool_run.tool_run_id,
+                                        "tool_name": tool_run.tool_name,
+                                        "reason": tool_run.error_message,
+                                    },
+                                )
 
+                        public_state_update = _public_state_update(state_update)
                         data = json.dumps(
-                            {"step": node_name, "data": state_update},
+                            {"step": node_name, "data": public_state_update},
                             ensure_ascii=False,
                         )
                         yield f"data: {data}\n\n"
@@ -262,3 +292,8 @@ def _record_node_token_estimate(
             actual_input=estimated,
             actual_output=0,
         )
+
+
+def _public_state_update(state_update: dict) -> dict:
+    """Hide internal observability fields from the SSE payload."""
+    return {key: value for key, value in state_update.items() if not key.startswith("_")}

@@ -7,7 +7,12 @@ from typing import Protocol
 from app.core.config import settings
 from app.core.exceptions import ConfigurationError
 from app.db.migrations import run_postgres_migrations
-from app.models.domain import ErrorEventRecord, WorkflowNodeRunRecord, WorkflowRunRecord
+from app.models.domain import (
+    ErrorEventRecord,
+    WorkflowNodeRunRecord,
+    WorkflowRunRecord,
+    WorkflowToolRunRecord,
+)
 
 
 class WorkflowTraceRepository(Protocol):
@@ -17,6 +22,9 @@ class WorkflowTraceRepository(Protocol):
         ...
 
     async def save_node_run(self, node_run: WorkflowNodeRunRecord) -> None:
+        ...
+
+    async def save_tool_run(self, tool_run: WorkflowToolRunRecord) -> None:
         ...
 
     async def save_error_event(self, event: ErrorEventRecord) -> None:
@@ -29,6 +37,9 @@ class WorkflowTraceRepository(Protocol):
         ...
 
     async def list_node_runs(self, run_id: str) -> list[WorkflowNodeRunRecord]:
+        ...
+
+    async def list_tool_runs(self, run_id: str) -> list[WorkflowToolRunRecord]:
         ...
 
     async def list_error_events(self, tenant_id: str, *, limit: int = 50) -> list[ErrorEventRecord]:
@@ -150,6 +161,47 @@ class PostgresWorkflowTraceRepository:
                 json.dumps(node_run.metadata, ensure_ascii=False),
             )
 
+    async def save_tool_run(self, tool_run: WorkflowToolRunRecord) -> None:
+        pool = await self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO workflow_tool_runs (
+                    tool_run_id, run_id, node_name, tool_name, tenant_id, session_id,
+                    turn_id, status, started_at, finished_at, duration_ms,
+                    input_summary, output_summary, error_code, error_message, metadata
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                    $13, $14, $15, $16::jsonb
+                )
+                ON CONFLICT (tool_run_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    finished_at = EXCLUDED.finished_at,
+                    duration_ms = EXCLUDED.duration_ms,
+                    output_summary = EXCLUDED.output_summary,
+                    error_code = EXCLUDED.error_code,
+                    error_message = EXCLUDED.error_message,
+                    metadata = EXCLUDED.metadata
+                """,
+                tool_run.tool_run_id,
+                tool_run.run_id,
+                tool_run.node_name,
+                tool_run.tool_name,
+                tool_run.tenant_id,
+                tool_run.session_id,
+                tool_run.turn_id,
+                tool_run.status,
+                tool_run.started_at,
+                tool_run.finished_at,
+                tool_run.duration_ms,
+                tool_run.input_summary,
+                tool_run.output_summary,
+                tool_run.error_code,
+                tool_run.error_message,
+                json.dumps(tool_run.metadata, ensure_ascii=False),
+            )
+
     async def save_error_event(self, event: ErrorEventRecord) -> None:
         pool = await self._require_pool()
         async with pool.acquire() as conn:
@@ -226,6 +278,19 @@ class PostgresWorkflowTraceRepository:
                 run_id,
             )
         return [WorkflowNodeRunRecord.from_dict(dict(row)) for row in rows]
+
+    async def list_tool_runs(self, run_id: str) -> list[WorkflowToolRunRecord]:
+        pool = await self._require_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM workflow_tool_runs
+                WHERE run_id = $1
+                ORDER BY started_at ASC
+                """,
+                run_id,
+            )
+        return [WorkflowToolRunRecord.from_dict(dict(row)) for row in rows]
 
     async def list_error_events(
         self,

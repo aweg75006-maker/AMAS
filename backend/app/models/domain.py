@@ -71,6 +71,11 @@ class WorkflowNodeStatus(str, Enum):
     FAILED = "failed"
 
 
+class WorkflowToolStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 @dataclass
 class SessionMeta:
     """Session metadata persisted by the session store."""
@@ -587,6 +592,72 @@ class WorkflowNodeRunRecord:
             error_code=d.get("error_code", ""),
             error_message=d.get("error_message", ""),
             metadata=parse_jsonish(d.get("metadata"), {}),
+        )
+
+
+@dataclass
+class WorkflowToolRunRecord:
+    """Trace for one tool call made inside a workflow node."""
+
+    tool_run_id: str
+    run_id: str
+    node_name: str
+    tool_name: str
+    tenant_id: str
+    session_id: str = ""
+    turn_id: str = ""
+    status: str = WorkflowToolStatus.SUCCEEDED.value
+    started_at: float = field(default_factory=time.time)
+    finished_at: float = field(default_factory=time.time)
+    duration_ms: int = 0
+    input_summary: str = ""
+    output_summary: str = ""
+    error_code: str = ""
+    error_message: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "tool_run_id": self.tool_run_id,
+            "run_id": self.run_id,
+            "node_name": self.node_name,
+            "tool_name": self.tool_name,
+            "tenant_id": self.tenant_id,
+            "session_id": self.session_id,
+            "turn_id": self.turn_id,
+            "status": self.status,
+            "started_at": str(self.started_at),
+            "finished_at": str(self.finished_at),
+            "duration_ms": str(self.duration_ms),
+            "input_summary": self.input_summary,
+            "output_summary": self.output_summary,
+            "error_code": self.error_code,
+            "error_message": self.error_message,
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "WorkflowToolRunRecord":
+        metadata = d.get("metadata", {})
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata or "{}")
+        return cls(
+            tool_run_id=d.get("tool_run_id", ""),
+            run_id=d.get("run_id", ""),
+            node_name=d.get("node_name", ""),
+            tool_name=d.get("tool_name", ""),
+            tenant_id=d.get("tenant_id", ""),
+            session_id=d.get("session_id", ""),
+            turn_id=d.get("turn_id", ""),
+            status=d.get("status", WorkflowToolStatus.SUCCEEDED.value),
+            started_at=float(d.get("started_at", 0) or 0),
+            finished_at=float(d.get("finished_at", 0) or 0),
+            duration_ms=int(d.get("duration_ms", 0) or 0),
+            input_summary=d.get("input_summary", ""),
+            output_summary=d.get("output_summary", ""),
+            error_code=d.get("error_code", ""),
+            error_message=d.get("error_message", ""),
+            metadata=metadata or {},
         )
 
 

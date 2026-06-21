@@ -39,6 +39,20 @@ def _persist_workflow_run():
                 state_update={"final_report": "done"},
                 started_at=run.started_at,
             )
+            await service.record_tool_run(
+                run=run,
+                node_name="researcher",
+                tool_snapshot={
+                    "tool_name": "rag.retrieve",
+                    "status": "succeeded",
+                    "started_at": run.started_at,
+                    "finished_at": run.started_at + 0.1,
+                    "duration_ms": 100,
+                    "input_summary": "route trace",
+                    "output_summary": "doc",
+                    "metadata": {"attempts": 1},
+                },
+            )
             await service.finish_run(run, status=WorkflowRunStatus.SUCCEEDED.value)
             await service.record_error_event(
                 error_code="ROUTE_TRACE_ERROR",
@@ -85,6 +99,7 @@ def test_owner_can_list_and_get_workflow_run(client):
     assert detail.status_code == 200
     assert detail.json()["run"]["run_id"] == run_id
     assert detail.json()["nodes"][0]["node_name"] == "writer"
+    assert detail.json()["tools"][0]["tool_name"] == "rag.retrieve"
     assert errors.status_code == 200
     assert any(item["error_code"] == "ROUTE_TRACE_ERROR" for item in errors.json()["items"])
     assert runtime.status_code == 200

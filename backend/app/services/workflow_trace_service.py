@@ -11,6 +11,7 @@ from app.models.domain import (
     WorkflowNodeStatus,
     WorkflowRunRecord,
     WorkflowRunStatus,
+    WorkflowToolRunRecord,
 )
 from app.repositories.workflow_trace_repository import (
     WorkflowTraceRepository,
@@ -144,6 +145,37 @@ class WorkflowTraceService:
         await self.repository.save_node_run(node_run)
         return node_run
 
+    async def record_tool_run(
+        self,
+        *,
+        run: WorkflowRunRecord,
+        node_name: str,
+        tool_snapshot: dict,
+    ) -> WorkflowToolRunRecord:
+        tool_run = WorkflowToolRunRecord(
+            tool_run_id=tool_snapshot.get("tool_run_id") or f"tool_{uuid4().hex[:16]}",
+            run_id=run.run_id,
+            node_name=node_name,
+            tool_name=tool_snapshot.get("tool_name", ""),
+            tenant_id=run.tenant_id,
+            session_id=run.session_id,
+            turn_id=run.turn_id,
+            status=tool_snapshot.get("status", "succeeded"),
+            started_at=float(tool_snapshot.get("started_at", time.time()) or time.time()),
+            finished_at=float(tool_snapshot.get("finished_at", time.time()) or time.time()),
+            duration_ms=int(tool_snapshot.get("duration_ms", 0) or 0),
+            input_summary=self._summarize_text(tool_snapshot.get("input_summary", "")),
+            output_summary=self._summarize_text(tool_snapshot.get("output_summary", "")),
+            error_code=tool_snapshot.get("error_code", ""),
+            error_message=self._summarize_text(tool_snapshot.get("error_message", ""), 1000),
+            metadata={
+                **(tool_snapshot.get("metadata") or {}),
+                "runtime": workflow_runtime_fingerprint(),
+            },
+        )
+        await self.repository.save_tool_run(tool_run)
+        return tool_run
+
     async def record_error_event(
         self,
         *,
@@ -193,12 +225,17 @@ class WorkflowTraceService:
         *,
         tenant_id: str,
         run_id: str,
-    ) -> tuple[WorkflowRunRecord, list[WorkflowNodeRunRecord]] | None:
+    ) -> tuple[
+        WorkflowRunRecord,
+        list[WorkflowNodeRunRecord],
+        list[WorkflowToolRunRecord],
+    ] | None:
         run = await self.repository.get_workflow_run(run_id)
         if run is None or run.tenant_id != tenant_id:
             return None
         nodes = await self.repository.list_node_runs(run_id)
-        return run, nodes
+        tools = await self.repository.list_tool_runs(run_id)
+        return run, nodes, tools
 
     async def list_error_events(
         self,

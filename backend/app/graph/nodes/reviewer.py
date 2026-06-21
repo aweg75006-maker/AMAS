@@ -1,26 +1,10 @@
 import json
-from langchain_core.prompts import ChatPromptTemplate
 from app.core.logging import get_logger
+from app.harness.registry import get_harness_node, get_prompt_template
 from app.utils.llm import get_llm
 from app.graph.state import AgentState
 
 logger = get_logger("iris.graph.reviewer")
-
-
-REVIEW_PROMPT = ChatPromptTemplate.from_template(
-    """你是一个严厉的审核员。
-    请检查以下报告是否充分回答了用户的问题：{query}
-    
-    报告内容：
-    {report}
-    
-    请严格按照以下 JSON 格式返回结果（不要包含 Markdown 代码块）：
-    {{
-        "status": "PASS" 或 "FAIL",
-        "feedback": "如果是 PASS，这里留空。如果是 FAIL，请列出 1 个具体的改进建议或需要补充搜索的方向。"
-    }}
-    """
-)
 
 def _clean_json_text(s: str) -> str:
     s = (s or "").strip()
@@ -45,7 +29,8 @@ def review_node(state: AgentState):
     from app.utils.budget_enforcer import create_enforcer_from_state
     enforcer = create_enforcer_from_state(state)
 
-    prompt_text = REVIEW_PROMPT.format(query=query, report=report)
+    harness_node = get_harness_node("reviewer")
+    prompt_text = get_prompt_template(harness_node.prompt_id).format(query=query, report=report)
     reviewer_llm = get_llm(model_type="smart")
     response, _ = enforcer.wrap_llm_call("reviewer", reviewer_llm, prompt_text, state)
     raw = response.content

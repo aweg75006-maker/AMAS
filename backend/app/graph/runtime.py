@@ -5,8 +5,10 @@ import time
 from collections.abc import Callable
 
 from app.core.config import settings
+from app.core.exceptions import ConfigurationError
 from app.core.logging import get_logger
 from app.graph.state import AgentState
+from app.harness.registry import get_harness_node
 
 
 logger = get_logger("iris.graph.runtime")
@@ -40,9 +42,23 @@ def wrap_node(
     fn: Callable[[AgentState], dict],
 ) -> Callable[[AgentState], object]:
     async def wrapped(state: AgentState) -> dict:
-        max_retries = max(0, settings.workflow_node_max_retries)
+        try:
+            harness_node = get_harness_node(node_name)
+        except ConfigurationError:
+            harness_node = None
+        configured_retries = (
+            harness_node.max_retries
+            if harness_node is not None and harness_node.max_retries is not None
+            else settings.workflow_node_max_retries
+        )
+        configured_timeout = (
+            harness_node.timeout_seconds
+            if harness_node is not None and harness_node.timeout_seconds is not None
+            else settings.workflow_node_timeout_seconds
+        )
+        max_retries = max(0, configured_retries)
         attempts_allowed = max_retries + 1
-        timeout = max(0.1, settings.workflow_node_timeout_seconds)
+        timeout = max(0.1, configured_timeout)
         backoff = max(0.0, settings.workflow_retry_backoff_seconds)
         started_at = time.time()
         last_error: Exception | None = None

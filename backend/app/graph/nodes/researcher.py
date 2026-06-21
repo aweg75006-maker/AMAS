@@ -1,10 +1,14 @@
 from app.core.logging import get_logger
-from app.tools.search import search_tavily
 from app.graph.state import AgentState
-from app.rag.engine import get_retriever
-from app.utils.llm import get_llm
+from app.tools.runtime import ToolRuntime
 
 logger = get_logger("iris.graph.researcher")
+
+
+def _append_tool_run(tool_runs: list[dict], result) -> None:
+    if result.run is not None:
+        tool_runs.append(result.run.to_dict())
+
 
 def research_node(state: AgentState):
 
@@ -13,6 +17,8 @@ def research_node(state: AgentState):
     query = state["query"]
     plans = state["plan"]
     results = []
+    tool_runs = []
+    tool_runtime = ToolRuntime(node_name="researcher")
 
     logger.info(
         "researcher_started",
@@ -24,55 +30,64 @@ def research_node(state: AgentState):
         },
     )
     
-    retriever = get_retriever(knowledge_base_id=knowledge_base_id)
     rag_content = ""
     is_doc_relevant = False
     
-    if retriever:
-        logger.info("rag_retrieval_started")
-        try:
-            docs = retriever.invoke(query)
-            if docs:
-                raw_context = "\n\n".join([f"[文档片段]: {doc.page_content}" for doc in docs])
-                logger.info(
-                    "rag_relevance_grading_started",
-                    extra={"doc_count": len(docs), "raw_context_length": len(raw_context)},
-                )
-                grader_prompt = f"""
-                你是一个严格的文档相关性评估员。
-                
-                用户问题: {query}
-                检索到的文档片段: 
-                {raw_context[:2000]} (截取部分)
-                
-                请判断：这些文档片段是否包含回答用户问题所需的信息？
-                - 如果文档完全不相关（例如问'吃什么'但文档是'深度学习'），请回答 "NO"。
-                - 如果文档相关或部分相关，请回答 "YES"。
-                
-                只输出 "YES" 或 "NO"，不要输出其他内容。
-                """
-                # Phase 4: 预算执行（文档相关性审计）
-                from app.utils.budget_enforcer import create_enforcer_from_state
-                enforcer = create_enforcer_from_state(state)
-                response, _ = enforcer.wrap_llm_call(
-                    "researcher", get_llm(model_type="smart"), grader_prompt, state
-                )
-                grade = response.content.strip().upper()
-                if "YES" in grade:
-                    is_doc_relevant = True
-                    rag_content = "\n\n".join([f"[文档片段]: {doc.page_content}" for doc in docs])
-                    results.append(f"### 📂 本地文档资料 (已核实相关)\n{rag_content}\n")
-                    logger.info("rag_relevance_passed", extra={"grade": grade})
-                else:
-                    logger.warning("rag_relevance_failed", extra={"grade": grade})
-
-                    results.append(f"[系统提示]: 检索了本地文档，但发现内容与问题不相关，已自动忽略。")
+    logger.info("rag_retrieval_started")
+    retrieve_result = tool_runtime.run_registered(
+        "rag.retrieve",
+        {
+            "query": query,
+            "knowledge_base_id": knowledge_base_id,
+        },
+        state=state,
+        input_summary=query,
+        metadata={"knowledge_base_id": knowledge_base_id},
+    )
+    _append_tool_run(tool_runs, retrieve_result)
+    if retrieve_result.ok:
+        docs = retrieve_result.value
+        if docs:
+            raw_context = "\n\n".join([f"[文档片段]: {doc.page_content}" for doc in docs])
+            logger.info(
+                "rag_relevance_grading_started",
+                extra={"doc_count": len(docs), "raw_context_length": len(raw_context)},
+            )
+            grade_result = tool_runtime.run_registered(
+                "rag.relevance_grade",
+                {
+                    "query": query,
+                    "document_context": raw_context,
+                },
+                state=state,
+                input_summary=f"{query}\n{raw_context[:500]}",
+                metadata={
+                    "knowledge_base_id": knowledge_base_id,
+                    "doc_count": len(docs),
+                    "raw_context_length": len(raw_context),
+                },
+            )
+            _append_tool_run(tool_runs, grade_result)
+            grade = grade_result.value if grade_result.ok else "NO"
+            if grade_result.ok and "YES" in grade:
+                is_doc_relevant = True
+                rag_content = "\n\n".join([f"[文档片段]: {doc.page_content}" for doc in docs])
+                results.append(f"### 📂 本地文档资料 (已核实相关)\n{rag_content}\n")
+                logger.info("rag_relevance_passed", extra={"grade": grade})
             else:
-                logger.info("rag_no_documents_found")
-        except Exception as e:
-            logger.exception("rag_retrieval_failed")
+                logger.warning("rag_relevance_failed", extra={"grade": grade})
+
+                results.append(f"[系统提示]: 检索了本地文档，但发现内容与问题不相关，已自动忽略。")
+        else:
+            logger.info("rag_no_documents_found")
     else:
-        logger.info("rag_retriever_empty")
+        logger.warning(
+            "rag_retrieval_failed",
+            extra={
+                "error_code": retrieve_result.run.error_code if retrieve_result.run else "",
+                "error_message": retrieve_result.run.error_message if retrieve_result.run else "",
+            },
+        )
     
     if mode == "document":
         if is_doc_relevant:
@@ -86,7 +101,8 @@ def research_node(state: AgentState):
             )
             return {
                 "search_results": results,
-                "should_stop": True 
+                "should_stop": True,
+                "_tool_runs": tool_runs,
             }
 
 
@@ -103,17 +119,32 @@ def research_node(state: AgentState):
         if should_web_search:
             logger.info("web_search_started", extra={"plan_count": len(plans)})
             for q in plans:
-                try:
-                    content = search_tavily(q)
+                search_result = tool_runtime.run_registered(
+                    "web.search",
+                    {"query": q},
+                    state=state,
+                    input_summary=q,
+                    metadata={"query_length": len(q)},
+                )
+                _append_tool_run(tool_runs, search_result)
+                if search_result.ok:
+                    content = search_result.value
                     results.append(f"### 🌐 网络搜索结果 ({q})\n{content}\n")
-                except Exception as e:
-                    logger.exception("web_search_failed", extra={"query_length": len(q)})
+                else:
+                    logger.warning(
+                        "web_search_failed",
+                        extra={
+                            "query_length": len(q),
+                            "error_code": search_result.run.error_code if search_result.run else "",
+                            "error_message": search_result.run.error_message if search_result.run else "",
+                        },
+                    )
             
     logger.info(
         "researcher_completed",
         extra={"result_count": len(results), "should_stop": False},
     )
-    return {"search_results": results}
+    return {"search_results": results, "_tool_runs": tool_runs}
 
 # 测试
 # def test():
