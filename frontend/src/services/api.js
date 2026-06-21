@@ -177,6 +177,21 @@ export async function disableMember(userId) {
   return await response.json();
 }
 
+export async function listAuditLogs({ limit = 100, action = '', actor_user_id = '' } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (action) params.set('action', action);
+  if (actor_user_id) params.set('actor_user_id', actor_user_id);
+
+  const response = await fetch(`${API_BASE}/audit-logs?${params.toString()}`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load audit logs"));
+  }
+  return await response.json();
+}
+
 // ─── 文件上传 ───
 
 /**

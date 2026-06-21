@@ -43,6 +43,18 @@ class TenantRole(str, Enum):
     VIEWER = "viewer"
 
 
+class AuditAction(str, Enum):
+    LOGIN_SUCCEEDED = "login.succeeded"
+    LOGIN_FAILED = "login.failed"
+    RATE_LIMIT_EXCEEDED = "rate_limit.exceeded"
+    KNOWLEDGE_BASE_CREATED = "knowledge_base.created"
+    KNOWLEDGE_BASE_CLEARED = "knowledge_base.cleared"
+    DOCUMENTS_UPLOADED = "documents.uploaded"
+    MEMBER_CREATED = "member.created"
+    MEMBER_ROLE_UPDATED = "member.role_updated"
+    MEMBER_DISABLED = "member.disabled"
+
+
 @dataclass
 class SessionMeta:
     """Session metadata persisted by the session store."""
@@ -242,6 +254,57 @@ class TenantMembership:
             status=d.get("status", "active"),
             created_at=float(d.get("created_at", 0) or 0),
             updated_at=float(d.get("updated_at", 0) or 0),
+        )
+
+
+@dataclass
+class AuditLog:
+    """Security and compliance event emitted by protected business actions."""
+
+    audit_id: str
+    action: str
+    tenant_id: str = ""
+    actor_user_id: str = ""
+    actor_username: str = ""
+    target_type: str = ""
+    target_id: str = ""
+    status: str = "success"
+    request_id: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
+    created_at: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "audit_id": self.audit_id,
+            "action": self.action,
+            "tenant_id": self.tenant_id,
+            "actor_user_id": self.actor_user_id,
+            "actor_username": self.actor_username,
+            "target_type": self.target_type,
+            "target_id": self.target_id,
+            "status": self.status,
+            "request_id": self.request_id,
+            "details": self.details,
+            "created_at": str(self.created_at),
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "AuditLog":
+        details = d.get("details", {})
+        if isinstance(details, str):
+            details = json.loads(details or "{}")
+        return cls(
+            audit_id=d.get("audit_id", ""),
+            action=d.get("action", ""),
+            tenant_id=d.get("tenant_id", ""),
+            actor_user_id=d.get("actor_user_id", ""),
+            actor_username=d.get("actor_username", ""),
+            target_type=d.get("target_type", ""),
+            target_id=d.get("target_id", ""),
+            status=d.get("status", "success"),
+            request_id=d.get("request_id", ""),
+            details=details or {},
+            created_at=float(d.get("created_at", 0) or 0),
         )
 
 

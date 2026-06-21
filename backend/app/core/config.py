@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     jwt_secret_key: Optional[SecretStr] = None
     jwt_access_token_ttl_seconds: int = 86_400
 
+    rate_limit_enabled: bool = True
+    rate_limit_login_capacity: int = 5
+    rate_limit_login_refill_per_second: float = 1 / 60
+    rate_limit_chat_capacity: int = 20
+    rate_limit_chat_refill_per_second: float = 1 / 15
+    rate_limit_upload_capacity: int = 10
+    rate_limit_upload_refill_per_second: float = 1 / 60
+    rate_limit_default_capacity: int = 60
+    rate_limit_default_refill_per_second: float = 1
+
     total_token_budget: int = 128_000
 
     rag_chroma_db_path: Path = Field(default=APP_DIR / "rag" / "chroma_db")
@@ -122,6 +132,10 @@ class Settings(BaseSettings):
             "seed_default_password_configured": bool(self.seed_default_password),
             "jwt_secret_configured": bool(self.jwt_secret_key),
             "jwt_access_token_ttl_seconds": self.jwt_access_token_ttl_seconds,
+            "rate_limit_enabled": self.rate_limit_enabled,
+            "rate_limit_login_capacity": self.rate_limit_login_capacity,
+            "rate_limit_chat_capacity": self.rate_limit_chat_capacity,
+            "rate_limit_upload_capacity": self.rate_limit_upload_capacity,
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),

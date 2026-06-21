@@ -1,8 +1,10 @@
+import asyncio
 from uuid import uuid4
 
 from app.core.config import settings
 from app.core.security import create_access_token
-from app.models.domain import TenantRole
+from app.models.domain import AuditAction, TenantRole
+from app.repositories.audit_repository import PostgresAuditRepository
 
 
 def _login_seed_user(client):
@@ -69,6 +71,25 @@ def test_owner_can_manage_members_without_leaking_password(client):
     assert updated.json()["membership"]["role"] == TenantRole.ADMIN.value
     assert disabled.status_code == 200
     assert disabled.json()["membership"]["status"] == "disabled"
+
+    dsn = settings.secret_value(settings.postgres_dsn)
+    assert dsn
+    async def load_logs():
+        audit_repository = PostgresAuditRepository(dsn)
+        await audit_repository.connect()
+        try:
+            return await audit_repository.list_audit_logs_for_tenant(
+                login["active_tenant_id"],
+                limit=50,
+            )
+        finally:
+            await audit_repository.close()
+
+    logs = asyncio.run(load_logs())
+    actions = [log.action for log in logs]
+    assert AuditAction.MEMBER_CREATED.value in actions
+    assert AuditAction.MEMBER_ROLE_UPDATED.value in actions
+    assert AuditAction.MEMBER_DISABLED.value in actions
 
 
 def test_member_management_requires_jwt_not_header_fallback(client):

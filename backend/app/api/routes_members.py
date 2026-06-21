@@ -3,8 +3,9 @@ from fastapi import APIRouter, Depends
 from app.api.permissions import WRITE_ROLES, require_roles
 from app.api.schemas import InviteMemberRequest, UpdateMemberRoleRequest
 from app.core.identity import RequestContext
-from app.models.domain import TenantMembership, UserAccount
+from app.models.domain import AuditAction, TenantMembership, UserAccount
 from app.services.account_service import get_account_service
+from app.services.audit_service import record_audit_event_for_context
 
 
 router = APIRouter(prefix="/members", tags=["members"])
@@ -59,6 +60,17 @@ async def invite_member_endpoint(
         display_name=request.display_name,
         role=request.role,
     )
+    await record_audit_event_for_context(
+        context,
+        action=AuditAction.MEMBER_CREATED.value,
+        target_type="user",
+        target_id=user.user_id,
+        details={
+            "member_user_id": user.user_id,
+            "member_username": user.username,
+            "role": membership.role,
+        },
+    )
     return {
         "status": "success",
         "tenant_id": context.tenant_id,
@@ -78,6 +90,16 @@ async def update_member_role_endpoint(
         user_id=user_id,
         role=request.role,
     )
+    await record_audit_event_for_context(
+        context,
+        action=AuditAction.MEMBER_ROLE_UPDATED.value,
+        target_type="user",
+        target_id=user_id,
+        details={
+            "member_user_id": user_id,
+            "role": membership.role,
+        },
+    )
     return {
         "status": "success",
         "tenant_id": context.tenant_id,
@@ -94,6 +116,13 @@ async def disable_member_endpoint(
     membership = await service.disable_member(
         tenant_id=context.tenant_id,
         user_id=user_id,
+    )
+    await record_audit_event_for_context(
+        context,
+        action=AuditAction.MEMBER_DISABLED.value,
+        target_type="user",
+        target_id=user_id,
+        details={"member_user_id": user_id},
     )
     return {
         "status": "success",

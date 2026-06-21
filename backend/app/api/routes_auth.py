@@ -1,17 +1,19 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.rate_limits import login_rate_limit
 from app.api.schemas import LoginRequest
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.security import create_access_token
-from app.models.domain import TenantRole
+from app.models.domain import AuditAction, TenantRole
 from app.services.account_service import get_account_service
+from app.services.audit_service import record_audit_event
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(login_rate_limit)])
 async def login_endpoint(request: LoginRequest):
     service = await get_account_service()
     await service.ensure_seed_default_user()
@@ -21,6 +23,14 @@ async def login_endpoint(request: LoginRequest):
         password=request.password,
     )
     if result is None:
+        await record_audit_event(
+            action=AuditAction.LOGIN_FAILED.value,
+            actor_username=request.username.strip().lower(),
+            target_type="user",
+            target_id=request.username.strip().lower(),
+            status="failed",
+            details={"reason": "invalid_credentials"},
+        )
         raise AppError(
             code="INVALID_CREDENTIALS",
             message="用户名或密码错误",
@@ -36,6 +46,16 @@ async def login_endpoint(request: LoginRequest):
         username=user.username,
         tenant_id=tenant_id,
         role=role,
+    )
+    await record_audit_event(
+        action=AuditAction.LOGIN_SUCCEEDED.value,
+        tenant_id=tenant_id,
+        actor_user_id=user.user_id,
+        actor_username=user.username,
+        target_type="user",
+        target_id=user.user_id,
+        status="success",
+        details={"role": role},
     )
     return {
         "status": "success",

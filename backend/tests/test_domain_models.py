@@ -1,4 +1,6 @@
 from app.models.domain import (
+    AuditAction,
+    AuditLog,
     DocumentRecord,
     DocumentStatus,
     KnowledgeBase,
@@ -107,6 +109,29 @@ def test_tenant_membership_round_trip():
     assert restored.tenant_id == "tenant_1"
     assert restored.user_id == "user_1"
     assert restored.role == TenantRole.OWNER.value
+
+
+def test_audit_log_round_trip_preserves_details():
+    event = AuditLog(
+        audit_id="audit_1",
+        action=AuditAction.MEMBER_ROLE_UPDATED.value,
+        tenant_id="tenant_1",
+        actor_user_id="user_owner",
+        target_type="user",
+        target_id="user_member",
+        request_id="req_1",
+        details={"role": "admin"},
+    )
+
+    restored = AuditLog.from_dict(event.to_dict())
+
+    assert restored.audit_id == "audit_1"
+    assert restored.action == AuditAction.MEMBER_ROLE_UPDATED.value
+    assert restored.details == {"role": "admin"}
+
+
+def test_audit_action_includes_rate_limit_event():
+    assert AuditAction.RATE_LIMIT_EXCEEDED.value == "rate_limit.exceeded"
 
 
 def test_document_record_round_trip_with_optional_page_count():

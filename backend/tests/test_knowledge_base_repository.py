@@ -16,9 +16,13 @@ class FakeConnection:
         self.executed.append((sql, args))
 
     async def fetchrow(self, sql, *args):
+        self.last_fetchrow_sql = sql
+        self.last_fetchrow_args = args
         return self.rows.get("fetchrow")
 
     async def fetch(self, sql, *args):
+        self.last_fetch_sql = sql
+        self.last_fetch_args = args
         return self.rows.get("fetch", [])
 
 

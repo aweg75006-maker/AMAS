@@ -1,5 +1,24 @@
+import asyncio
+
 from app.core.config import settings
 from app.core.security import create_access_token, decode_access_token
+from app.models.domain import AuditAction
+from app.repositories.audit_repository import PostgresAuditRepository
+
+
+def _load_audit_logs(tenant_id: str, limit: int = 50):
+    dsn = settings.secret_value(settings.postgres_dsn)
+    assert dsn
+
+    async def load_logs():
+        repository = PostgresAuditRepository(dsn)
+        await repository.connect()
+        try:
+            return await repository.list_audit_logs_for_tenant(tenant_id, limit=limit)
+        finally:
+            await repository.close()
+
+    return asyncio.run(load_logs())
 
 
 def test_login_rejects_invalid_credentials(client):
@@ -39,6 +58,9 @@ def test_seed_default_user_can_login_without_leaking_password(client):
     assert payload["tenant_id"] == body["active_tenant_id"]
     assert "password" not in str(body).lower()
     assert password not in str(body)
+
+    logs = _load_audit_logs(body["active_tenant_id"])
+    assert any(log.action == AuditAction.LOGIN_SUCCEEDED.value for log in logs)
 
 
 def test_bearer_token_controls_request_context(client):

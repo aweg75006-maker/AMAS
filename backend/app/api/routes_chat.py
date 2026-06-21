@@ -7,6 +7,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from app.api.context import RequestContext, get_request_context
 from app.api.dependencies import CHECKPOINT_DB_PATH, get_assembler
+from app.api.rate_limits import chat_rate_limit
 from app.api.schemas import ChatRequest
 from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
@@ -24,6 +25,7 @@ logger = get_logger("iris.api.chat")
 async def chat_endpoint(
     request: ChatRequest,
     http_request: Request,
+    _rate_limit: None = Depends(chat_rate_limit),
     context: RequestContext = Depends(get_request_context),
 ):
     """

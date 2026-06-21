@@ -41,3 +41,10 @@ def test_username_migration_revision_exists():
         "migrations.versions.20260621_0003_add_username_to_users"
     )
     assert spec is not None
+
+
+def test_audit_log_migration_revision_exists():
+    spec = importlib.util.find_spec(
+        "migrations.versions.20260621_0004_create_audit_logs"
+    )
+    assert spec is not None

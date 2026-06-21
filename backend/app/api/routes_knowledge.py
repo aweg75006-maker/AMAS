@@ -5,10 +5,13 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from app.api.context import RequestContext, get_request_context
 from app.api.permissions import require_write_access
+from app.api.rate_limits import upload_rate_limit
 from app.api.schemas import CreateKnowledgeBaseRequest
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
+from app.models.domain import AuditAction
 from app.rag.engine import get_upload_dir, process_documents, reset_knowledge_base
+from app.services.audit_service import record_audit_event_for_context
 from app.services.knowledge_base_service import get_knowledge_base_service
 from app.services.upload_security import save_upload_batch, validate_upload_files
 
@@ -45,6 +48,16 @@ async def create_knowledge_base(
         tenant_id=context.tenant_id,
         visibility=request.visibility,
         created_by=context.user_id,
+    )
+    await record_audit_event_for_context(
+        context,
+        action=AuditAction.KNOWLEDGE_BASE_CREATED.value,
+        target_type="knowledge_base",
+        target_id=kb.knowledge_base_id,
+        details={
+            "name": kb.name,
+            "visibility": kb.visibility,
+        },
     )
     return kb.to_dict()
 
@@ -97,6 +110,13 @@ async def clear_endpoint(
             )
         await service.clear_documents(kb.knowledge_base_id)
         reset_knowledge_base(kb.knowledge_base_id)
+        await record_audit_event_for_context(
+            context,
+            action=AuditAction.KNOWLEDGE_BASE_CLEARED.value,
+            target_type="knowledge_base",
+            target_id=kb.knowledge_base_id,
+            details={"knowledge_base_id": kb.knowledge_base_id},
+        )
         return {
             "message": "知识库已重置",
             "status": "success",
@@ -118,6 +138,7 @@ async def clear_endpoint(
 async def upload_files(
     files: List[UploadFile] = File(...),
     knowledge_base_id: str | None = Form(default=None),
+    _rate_limit: None = Depends(upload_rate_limit),
     context: RequestContext = Depends(require_write_access),
 ):
     """Upload documents into the current knowledge base."""
@@ -164,6 +185,18 @@ async def upload_files(
             )
             documents.append(document.to_dict())
 
+        await record_audit_event_for_context(
+            context,
+            action=AuditAction.DOCUMENTS_UPLOADED.value,
+            target_type="knowledge_base",
+            target_id=kb.knowledge_base_id,
+            details={
+                "knowledge_base_id": kb.knowledge_base_id,
+                "file_count": len(files),
+                "chunks_stored": chunks_num,
+                "document_ids": [document["document_id"] for document in documents],
+            },
+        )
         return {
             "status": "success",
             "knowledge_base_id": kb.knowledge_base_id,
