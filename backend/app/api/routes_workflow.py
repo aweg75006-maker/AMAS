@@ -3,11 +3,22 @@ from fastapi import APIRouter, Depends, Query
 from app.api.permissions import WRITE_ROLES, require_roles
 from app.core.exceptions import AppError
 from app.core.identity import RequestContext
+from app.services.workflow_runtime_service import workflow_runtime_fingerprint
 from app.services.workflow_trace_service import get_workflow_trace_service
 
 
 router = APIRouter(tags=["workflow"])
 require_workflow_reader = require_roles(WRITE_ROLES, allow_header_fallback=False)
+
+
+@router.get("/workflow-runtime")
+async def get_workflow_runtime_endpoint(
+    context: RequestContext = Depends(require_workflow_reader),
+):
+    return {
+        "tenant_id": context.tenant_id,
+        "runtime": workflow_runtime_fingerprint(),
+    }
 
 
 @router.get("/workflow-runs")

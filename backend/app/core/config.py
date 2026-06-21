@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     workflow_node_timeout_seconds: float = 120
     workflow_node_max_retries: int = 1
     workflow_retry_backoff_seconds: float = 1.0
+    workflow_version: str = "workflow.v1"
+    prompt_version: str = "prompt.v1"
+    node_policy_version: str = "node-policy.v1"
 
     total_token_budget: int = 128_000
 
@@ -143,6 +146,9 @@ class Settings(BaseSettings):
             "workflow_node_timeout_seconds": self.workflow_node_timeout_seconds,
             "workflow_node_max_retries": self.workflow_node_max_retries,
             "workflow_retry_backoff_seconds": self.workflow_retry_backoff_seconds,
+            "workflow_version": self.workflow_version,
+            "prompt_version": self.prompt_version,
+            "node_policy_version": self.node_policy_version,
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),

@@ -24,6 +24,9 @@ def test_safe_summary_masks_secrets():
     assert "rate_limit_login_capacity" in summary
     assert "workflow_node_timeout_seconds" in summary
     assert "workflow_node_max_retries" in summary
+    assert "workflow_version" in summary
+    assert "prompt_version" in summary
+    assert "node_policy_version" in summary
 
 
 def test_missing_required_secrets_raise_configuration_error():

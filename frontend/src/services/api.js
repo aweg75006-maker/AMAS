@@ -232,6 +232,16 @@ export async function listWorkflowRuns({ limit = 50 } = {}) {
   return await response.json();
 }
 
+export async function getWorkflowRuntime() {
+  const response = await fetch(`${API_BASE}/workflow-runtime`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load workflow runtime"));
+  }
+  return await response.json();
+}
+
 export async function getWorkflowRun(runId) {
   const response = await fetch(`${API_BASE}/workflow-runs/${runId}`, {
     headers: contextHeaders(),

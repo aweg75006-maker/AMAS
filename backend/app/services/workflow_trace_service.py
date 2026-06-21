@@ -16,6 +16,7 @@ from app.repositories.workflow_trace_repository import (
     WorkflowTraceRepository,
     get_workflow_trace_repository,
 )
+from app.services.workflow_runtime_service import workflow_runtime_fingerprint
 
 
 logger = get_logger("iris.workflow_trace")
@@ -51,7 +52,7 @@ class WorkflowTraceService:
             query=query,
             search_mode=search_mode,
             status=WorkflowRunStatus.RUNNING.value,
-            metadata=metadata or {},
+            metadata={**workflow_runtime_fingerprint(), **(metadata or {})},
         )
         await self.repository.save_workflow_run(run)
         return run
@@ -100,7 +101,10 @@ class WorkflowTraceService:
             input_summary=self._summarize_text(run.query),
             output_summary=self._summarize_state_update(state_update),
             token_usage=token_usage or {},
-            metadata={"state_keys": sorted(state_update.keys())},
+            metadata={
+                "state_keys": sorted(state_update.keys()),
+                "runtime": workflow_runtime_fingerprint(),
+            },
         )
         await self.repository.save_node_run(node_run)
         return node_run
@@ -132,7 +136,10 @@ class WorkflowTraceService:
             output_summary="",
             error_code=error_code,
             error_message=error_message[:1000],
-            metadata={"attempts": attempts},
+            metadata={
+                "attempts": attempts,
+                "runtime": workflow_runtime_fingerprint(),
+            },
         )
         await self.repository.save_node_run(node_run)
         return node_run

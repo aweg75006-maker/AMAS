@@ -58,7 +58,10 @@ async def test_workflow_trace_service_records_run_node_and_error():
         assert result is not None
         restored_run, nodes = result
         assert restored_run.status == WorkflowRunStatus.SUCCEEDED.value
+        assert restored_run.metadata["workflow_version"]
+        assert restored_run.metadata["prompt_version"]
         assert nodes[0].node_name == "writer"
+        assert nodes[0].metadata["runtime"]["node_policy_version"]
         assert any(event.error_code == "TRACE_TEST_ERROR" for event in errors)
     finally:
         await repository.close()

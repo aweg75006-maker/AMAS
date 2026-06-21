@@ -75,6 +75,10 @@ def test_owner_can_list_and_get_workflow_run(client):
         "/api/error-events",
         headers={"Authorization": f"Bearer {token}"},
     )
+    runtime = client.get(
+        "/api/workflow-runtime",
+        headers={"Authorization": f"Bearer {token}"},
+    )
 
     assert listed.status_code == 200
     assert any(item["run_id"] == run_id for item in listed.json()["items"])
@@ -83,6 +87,8 @@ def test_owner_can_list_and_get_workflow_run(client):
     assert detail.json()["nodes"][0]["node_name"] == "writer"
     assert errors.status_code == 200
     assert any(item["error_code"] == "ROUTE_TRACE_ERROR" for item in errors.json()["items"])
+    assert runtime.status_code == 200
+    assert runtime.json()["runtime"]["workflow_version"]
 
 
 def test_viewer_cannot_list_workflow_runs(client):
