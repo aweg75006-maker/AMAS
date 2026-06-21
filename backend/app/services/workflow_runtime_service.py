@@ -7,11 +7,12 @@ from app.harness.registry import harness_fingerprint
 def workflow_runtime_fingerprint() -> dict[str, object]:
     """Current workflow/prompt/node runtime fingerprint for traceability."""
 
+    harness = harness_fingerprint()
     return {
         "workflow_version": settings.workflow_version,
         "prompt_version": settings.prompt_version,
         "node_policy_version": settings.node_policy_version,
-        "harness": harness_fingerprint(),
+        "harness": harness,
         "models": {
             "fast": settings.llm_fast_model,
             "smart": settings.llm_smart_model,
@@ -20,6 +21,13 @@ def workflow_runtime_fingerprint() -> dict[str, object]:
             "timeout_seconds": settings.workflow_node_timeout_seconds,
             "max_retries": settings.workflow_node_max_retries,
             "retry_backoff_seconds": settings.workflow_retry_backoff_seconds,
+        },
+        "loop_policy": {
+            "max_revisions": harness["max_revisions"],
+            "review_fail_next": "planner",
+            "review_replan_next": "planner",
+            "review_rewrite_next": "writer",
+            "research_stop_next": "__end__",
         },
         "rag": {
             "embedding_model": settings.rag_embedding_model,

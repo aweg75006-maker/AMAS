@@ -7,5 +7,6 @@
 请严格按照以下 JSON 格式返回结果（不要包含 Markdown 代码块）：
 {{
     "status": "PASS" 或 "FAIL",
-    "feedback": "如果是 PASS，这里留空。如果是 FAIL，请列出 1 个具体的改进建议或需要补充搜索的方向。"
+    "feedback": "如果是 PASS，这里留空。如果是 FAIL，请列出 1 个具体的改进建议或需要补充搜索的方向。",
+    "action": "PASS 时填 none；FAIL 时只能填 replan 或 rewrite。资料不足、缺证据、需要补充搜索时填 replan；结构、表达、遗漏整合、格式问题时填 rewrite。"
 }}

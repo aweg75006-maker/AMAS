@@ -75,6 +75,7 @@ class AgentState(TypedDict, total=False):
     critique: str                   # 审查意见
     revision_number: int            # 当前修改到了第几版 (防止死循环)
     review_status: str              # "PASS" 或 "FAIL"
+    review_action: str              # "none" / "replan" / "rewrite"
     search_mode: str                # 取值: "document" 或 "hybrid"
     should_stop: bool               # 控制位
 

@@ -43,7 +43,7 @@ def review_node(state: AgentState):
         retry_prompt = f'''
         你刚才的输出无法被 JSON 解析。
         请只输出一行合法 JSON，不要 Markdown，不要解释：
-        {{"status":"PASS"或"FAIL","feedback":"PASS留空，FAIL给1条具体建议"}}
+        {{"status":"PASS"或"FAIL","feedback":"PASS留空，FAIL给1条具体建议","action":"none/replan/rewrite"}}
 
         用户问题：{query}
         报告：{report}
@@ -66,13 +66,15 @@ def review_node(state: AgentState):
             )
             result = {
                 "status": "FAIL",
-                "feedback": "审查器输出格式异常（未返回合法JSON）。请按要求重写报告，并确保内容充分回答问题且结构清晰；如资料不足请明确说明并提出需要补充检索的点。"
+                "feedback": "审查器输出格式异常（未返回合法JSON）。请按要求重写报告，并确保内容充分回答问题且结构清晰；如资料不足请明确说明并提出需要补充检索的点。",
+                "action": "rewrite",
             }
 
     logger.info(
         "reviewer_completed",
         extra={
             "review_status": result.get("status", "FAIL"),
+            "review_action": result.get("action", ""),
             "feedback_length": len(result.get("feedback", "")),
             "revision_number": num + 1,
         },
@@ -80,7 +82,8 @@ def review_node(state: AgentState):
     return {
         "critique": result.get("feedback",""),
         "revision_number": num + 1,
-        "review_status": result.get("status", "FAIL")
+        "review_status": result.get("status", "FAIL"),
+        "review_action": result.get("action", ""),
     }
 
 # 测试函数

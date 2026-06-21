@@ -42,6 +42,7 @@ class HarnessManifest:
     workflow_version: str
     prompt_version: str
     node_policy_version: str
+    max_revisions: int
     nodes: dict[str, HarnessNode]
 
 
@@ -84,6 +85,7 @@ def get_harness_manifest() -> HarnessManifest:
         workflow_version=data.get("workflow_version", settings.workflow_version),
         prompt_version=data.get("prompt_version", settings.prompt_version),
         node_policy_version=data.get("node_policy_version", settings.node_policy_version),
+        max_revisions=int(data.get("max_revisions", 3) or 3),
         nodes=nodes,
     )
 
@@ -114,6 +116,7 @@ def harness_fingerprint() -> dict[str, object]:
         "prompt_version": manifest.prompt_version,
         "node_policy_version": manifest.node_policy_version,
         "harness_manifest": settings.harness_manifest,
+        "max_revisions": manifest.max_revisions,
         "nodes": {
             name: {
                 "prompt_id": node.prompt_id,

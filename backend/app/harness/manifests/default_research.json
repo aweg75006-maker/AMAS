@@ -3,6 +3,7 @@
   "workflow_version": "workflow.v1",
   "prompt_version": "prompt.v1",
   "node_policy_version": "node-policy.v1",
+  "max_revisions": 3,
   "nodes": {
     "planner": {
       "prompt_id": "planner.research.v1",
