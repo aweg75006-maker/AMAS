@@ -1,5 +1,25 @@
 import pytest
 
+from app.core.config import settings
+from app.repositories.workflow_trace_repository import PostgresWorkflowTraceRepository
+
+
+def _load_error_events(tenant_id: str, limit: int = 20):
+    import asyncio
+
+    dsn = settings.secret_value(settings.postgres_dsn)
+    assert dsn
+
+    async def load():
+        repository = PostgresWorkflowTraceRepository(dsn)
+        await repository.connect()
+        try:
+            return await repository.list_error_events(tenant_id, limit=limit)
+        finally:
+            await repository.close()
+
+    return asyncio.run(load())
+
 
 def test_session_not_found_error_shape(client):
     response = client.get(
@@ -15,6 +35,25 @@ def test_session_not_found_error_shape(client):
     assert body["error"]["message"] == "会话不存在"
     assert body["error"]["request_id"] == "test-session-not-found"
     assert body["error"]["details"]["session_id"] == "not-exist"
+
+
+def test_application_error_is_persisted_to_database(client):
+    response = client.get(
+        "/api/sessions/not-exist",
+        headers={
+            "X-Request-ID": "test-error-event-persist",
+            "X-Tenant-ID": "tenant_error_event",
+            "X-User-ID": "user_error_event",
+        },
+    )
+
+    assert response.status_code == 404
+    events = _load_error_events("tenant_error_event")
+    assert any(
+        event.error_code == "SESSION_NOT_FOUND"
+        and event.request_id == "test-error-event-persist"
+        for event in events
+    )
 
 
 def test_upload_too_many_files_error_shape(client):

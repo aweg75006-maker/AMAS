@@ -48,3 +48,17 @@ def test_audit_log_migration_revision_exists():
         "migrations.versions.20260621_0004_create_audit_logs"
     )
     assert spec is not None
+
+
+def test_chat_history_migration_revision_exists():
+    spec = importlib.util.find_spec(
+        "migrations.versions.20260621_0005_create_chat_history"
+    )
+    assert spec is not None
+
+
+def test_workflow_trace_migration_revision_exists():
+    spec = importlib.util.find_spec(
+        "migrations.versions.20260621_0006_create_workflow_traces"
+    )
+    assert spec is not None

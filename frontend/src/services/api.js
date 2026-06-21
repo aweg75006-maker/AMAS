@@ -192,6 +192,69 @@ export async function listAuditLogs({ limit = 100, action = '', actor_user_id = 
   return await response.json();
 }
 
+export async function listHistorySessions({ limit = 50, scope = 'mine' } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('scope', scope);
+
+  const response = await fetch(`${API_BASE}/history/sessions?${params.toString()}`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load history sessions"));
+  }
+  return await response.json();
+}
+
+export async function getHistorySession(sessionId, { limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+
+  const response = await fetch(`${API_BASE}/history/sessions/${sessionId}?${params.toString()}`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load history session"));
+  }
+  return await response.json();
+}
+
+export async function listWorkflowRuns({ limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+
+  const response = await fetch(`${API_BASE}/workflow-runs?${params.toString()}`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load workflow runs"));
+  }
+  return await response.json();
+}
+
+export async function getWorkflowRun(runId) {
+  const response = await fetch(`${API_BASE}/workflow-runs/${runId}`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load workflow run"));
+  }
+  return await response.json();
+}
+
+export async function listErrorEvents({ limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+
+  const response = await fetch(`${API_BASE}/error-events?${params.toString()}`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load error events"));
+  }
+  return await response.json();
+}
+
 // ─── 文件上传 ───
 
 /**

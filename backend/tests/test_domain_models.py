@@ -1,8 +1,11 @@
 from app.models.domain import (
     AuditAction,
     AuditLog,
+    ChatSessionRecord,
+    ChatTurnRecord,
     DocumentRecord,
     DocumentStatus,
+    ErrorEventRecord,
     KnowledgeBase,
     KnowledgeBaseVisibility,
     SessionMeta,
@@ -11,6 +14,9 @@ from app.models.domain import (
     TenantMembership,
     TenantRole,
     UserAccount,
+    WorkflowNodeRunRecord,
+    WorkflowRunRecord,
+    WorkflowRunStatus,
     TurnRecord,
 )
 
@@ -132,6 +138,89 @@ def test_audit_log_round_trip_preserves_details():
 
 def test_audit_action_includes_rate_limit_event():
     assert AuditAction.RATE_LIMIT_EXCEEDED.value == "rate_limit.exceeded"
+
+
+def test_chat_session_record_round_trip():
+    session = ChatSessionRecord(
+        session_id="iris_test",
+        tenant_id="tenant_1",
+        user_id="user_1",
+        username="owner",
+        knowledge_base_id="kb_1",
+        title="测试会话",
+        turns_count=2,
+        total_estimated_tokens=12,
+    )
+
+    restored = ChatSessionRecord.from_dict(session.to_dict())
+
+    assert restored.session_id == "iris_test"
+    assert restored.tenant_id == "tenant_1"
+    assert restored.title == "测试会话"
+    assert restored.turns_count == 2
+
+
+def test_chat_turn_record_round_trip():
+    turn = ChatTurnRecord(
+        turn_id="turn_1",
+        session_id="iris_test",
+        tenant_id="tenant_1",
+        query="hello",
+        plan=["step"],
+        search_results=["result"],
+        token_usage={"estimated_input": 1},
+    )
+
+    restored = ChatTurnRecord.from_dict(turn.to_dict())
+
+    assert restored.turn_id == "turn_1"
+    assert restored.session_id == "iris_test"
+    assert restored.plan == ["step"]
+    assert restored.token_usage == {"estimated_input": 1}
+
+
+def test_workflow_run_and_node_round_trip():
+    run = WorkflowRunRecord(
+        run_id="run_1",
+        tenant_id="tenant_1",
+        session_id="iris_1",
+        turn_id="turn_1",
+        query="hello",
+        status=WorkflowRunStatus.SUCCEEDED.value,
+        metadata={"thread_id": "turn_1"},
+    )
+    node = WorkflowNodeRunRecord(
+        node_run_id="node_1",
+        run_id="run_1",
+        node_name="writer",
+        tenant_id="tenant_1",
+        output_summary="done",
+        token_usage={"estimated": 1},
+    )
+
+    restored_run = WorkflowRunRecord.from_dict(run.to_dict())
+    restored_node = WorkflowNodeRunRecord.from_dict(node.to_dict())
+
+    assert restored_run.run_id == "run_1"
+    assert restored_run.metadata == {"thread_id": "turn_1"}
+    assert restored_node.node_name == "writer"
+    assert restored_node.token_usage == {"estimated": 1}
+
+
+def test_error_event_round_trip():
+    event = ErrorEventRecord(
+        error_event_id="err_1",
+        error_code="TEST_ERROR",
+        message="failed",
+        tenant_id="tenant_1",
+        details={"reason": "boom"},
+    )
+
+    restored = ErrorEventRecord.from_dict(event.to_dict())
+
+    assert restored.error_event_id == "err_1"
+    assert restored.error_code == "TEST_ERROR"
+    assert restored.details == {"reason": "boom"}
 
 
 def test_document_record_round_trip_with_optional_page_count():

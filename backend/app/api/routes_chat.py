@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -13,7 +14,10 @@ from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.graph.graph import create_graph
+from app.models.domain import WorkflowRunStatus
+from app.services.chat_history_service import persist_completed_chat_turn
 from app.services.knowledge_base_service import get_knowledge_base_service
+from app.services.workflow_trace_service import get_workflow_trace_service
 from app.utils.budget_ledger import BudgetLedger
 
 
@@ -78,6 +82,17 @@ async def chat_endpoint(
 
     async def event_generator():
         final_state = {}
+        trace_service = await get_workflow_trace_service()
+        workflow_run = await trace_service.start_run(
+            context=context,
+            session_id=session_id,
+            turn_id=turn_id,
+            knowledge_base_id=knowledge_base_id,
+            query=request.query,
+            search_mode=request.search_mode,
+            request_id=request_id,
+            metadata={"thread_id": request.thread_id or turn_id},
+        )
 
         logger.info(
             "chat_started",
@@ -101,9 +116,17 @@ async def chat_endpoint(
 
                 async for event in app.astream(initial_state, config=config):
                     for node_name, state_update in event.items():
+                        node_started_at = time.time()
                         final_state.update(state_update)
                         _record_node_token_estimate(
                             ledger, node_name, state_update
+                        )
+                        await trace_service.record_node_success(
+                            run=workflow_run,
+                            node_name=node_name,
+                            state_update=state_update,
+                            started_at=node_started_at,
+                            token_usage=ledger.snapshot().__dict__,
                         )
 
                         data = json.dumps(
@@ -115,6 +138,15 @@ async def chat_endpoint(
 
             full_state = {**initial_state, **final_state}
             turn_record = await assembler.finalize(full_state, ledger)
+            session_meta = await assembler.session_mgr.load_session(session_id)
+            if session_meta is not None:
+                await persist_completed_chat_turn(
+                    session_meta=session_meta,
+                    turn_record=turn_record,
+                    context=context,
+                    knowledge_base_id=knowledge_base_id,
+                    snapshot=ledger.snapshot(),
+                )
 
             window_stats = assembler.window_mgr.get_window_stats(
                 initial_state.get("episodic_memory", []) +
@@ -135,6 +167,11 @@ async def chat_endpoint(
                 ensure_ascii=False,
             )
             yield f"data: {session_info}\n\n"
+            await trace_service.finish_run(
+                workflow_run,
+                status=WorkflowRunStatus.SUCCEEDED.value,
+                metadata={"turn_number": turn_record.turn_number},
+            )
 
         except Exception as e:
             logger.exception(
@@ -144,6 +181,25 @@ async def chat_endpoint(
                     "session_id": session_id,
                     "turn_id": turn_id,
                 },
+            )
+            await trace_service.finish_run(
+                workflow_run,
+                status=WorkflowRunStatus.FAILED.value,
+                error_code="CHAT_STREAM_FAILED",
+                error_message=str(e),
+            )
+            await trace_service.record_error_event(
+                error_code="CHAT_STREAM_FAILED",
+                message="任务执行失败",
+                source="workflow",
+                context=context,
+                request_id=request_id,
+                session_id=session_id,
+                turn_id=turn_id,
+                run_id=workflow_run.run_id,
+                path=str(http_request.url.path),
+                status_code=500,
+                details={"reason": str(e)},
             )
             yield sse_error_event(
                 code="CHAT_STREAM_FAILED",
