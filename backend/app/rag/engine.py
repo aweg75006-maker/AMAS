@@ -1,6 +1,7 @@
 import os
 import shutil
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, List, Optional
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core import vectorstores
@@ -66,6 +67,21 @@ class RerankRetriever(BaseRetriever):
 # 定义数据存储路径
 DB_PATH = str(settings.rag_chroma_db_path)   # 数据库文件存这里
 UPLOAD_DIR = str(settings.rag_upload_dir) # 用户上传的 PDF 存这里
+DEFAULT_KNOWLEDGE_BASE_ID = "kb_default"
+
+
+def _safe_knowledge_base_id(knowledge_base_id: str | None = None) -> str:
+    raw = (knowledge_base_id or DEFAULT_KNOWLEDGE_BASE_ID).strip()
+    safe = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in raw)
+    return safe or DEFAULT_KNOWLEDGE_BASE_ID
+
+
+def get_db_path(knowledge_base_id: str | None = None) -> str:
+    return str(Path(DB_PATH) / _safe_knowledge_base_id(knowledge_base_id))
+
+
+def get_upload_dir(knowledge_base_id: str | None = None) -> str:
+    return str(Path(UPLOAD_DIR) / _safe_knowledge_base_id(knowledge_base_id))
 
 
 @lru_cache
@@ -77,25 +93,28 @@ def get_embeddings():
         dashscope_api_key=settings.require_dashscope_api_key(),
     )
 
-def reset_knowledge_base():
+def reset_knowledge_base(knowledge_base_id: str | None = None):
     """
     重置知识库：
     Windows 兼容版修复：不删除 DB 文件夹（避免 WinError 32），而是清空数据。
     """
 
-    if os.path.exists(UPLOAD_DIR):
+    upload_dir = get_upload_dir(knowledge_base_id)
+    db_path = get_db_path(knowledge_base_id)
+
+    if os.path.exists(upload_dir):
         try:
-            shutil.rmtree(UPLOAD_DIR)
+            shutil.rmtree(upload_dir)
         except Exception as e:
             logger.warning("rag_upload_dir_cleanup_failed", exc_info=True)
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    os.makedirs(upload_dir, exist_ok=True)
 
 
     logger.info("rag_reset_started")
     try:
-        if os.path.exists(DB_PATH):
+        if os.path.exists(db_path):
             vectorstore = Chroma(
-                persist_directory=DB_PATH,
+                persist_directory=db_path,
                 embedding_function=get_embeddings(),
             )
             try:
@@ -106,7 +125,7 @@ def reset_knowledge_base():
     except Exception as e:
         logger.warning("rag_reset_nonfatal_error", exc_info=True)
 
-def process_documents(file_paths: List[str]):
+def process_documents(file_paths: List[str], knowledge_base_id: str | None = None):
     """
     核心逻辑：读取 -> 切片 -> 向量化 -> 存储
     可以考虑 VIT
@@ -132,24 +151,26 @@ def process_documents(file_paths: List[str]):
             )
     
     if all_splits:
+        db_path = get_db_path(knowledge_base_id)
         logger.info("rag_vector_write_started", extra={"split_count": len(all_splits)})
         Chroma.from_documents(
             documents=all_splits,
             embedding=get_embeddings(),
-            persist_directory=DB_PATH
+            persist_directory=db_path
         )
         logger.info("rag_vector_write_completed", extra={"split_count": len(all_splits)})
     
     return len(all_splits)
 
-def get_retriever():
+def get_retriever(knowledge_base_id: str | None = None):
     """
     获取检索器：给 Agent 用的接口
     """
-    if not os.path.exists(DB_PATH) or not os.listdir(DB_PATH):
+    db_path = get_db_path(knowledge_base_id)
+    if not os.path.exists(db_path) or not os.listdir(db_path):
         return None
     vectorstore = Chroma(
-        persist_directory=DB_PATH,
+        persist_directory=db_path,
         embedding_function=get_embeddings(),
     )
     top_k = settings.rag_top_k

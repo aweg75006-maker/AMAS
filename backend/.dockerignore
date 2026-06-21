@@ -1,0 +1,8 @@
+.env
+.pytest_cache/
+__pycache__/
+*.pyc
+app/api/checkpoints.db
+app/rag/chroma_db/
+app/rag/chroma_db_turns/
+app/rag/uploads/

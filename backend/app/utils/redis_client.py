@@ -18,6 +18,7 @@ import asyncio
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 import logging
+import fnmatch
 from app.core.config import settings
 
 logger = logging.getLogger("iris.redis")
@@ -95,6 +96,10 @@ class InMemoryStore:
     async def exists(self, key: str) -> bool:
         self._cleanup()
         return key in self.data
+
+    async def keys(self, pattern: str) -> List[str]:
+        self._cleanup()
+        return [key for key in self.data.keys() if fnmatch.fnmatch(key, pattern)]
 
     async def expire(self, key: str, ttl: int):
         import time
@@ -313,6 +318,16 @@ class RedisClient:
         if self._fallback:
             return await self._fallback.exists(key)
         return False
+
+    async def keys(self, pattern: str) -> List[str]:
+        if self._client:
+            try:
+                return [key async for key in self._client.scan_iter(match=pattern)]
+            except Exception:
+                pass
+        if self._fallback:
+            return await self._fallback.keys(pattern)
+        return []
 
     async def expire(self, key: str, ttl: int):
         if self._client:

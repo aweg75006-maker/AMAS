@@ -1,15 +1,18 @@
 import asyncio
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from app.api.context import RequestContext, get_request_context
 from app.api.dependencies import CHECKPOINT_DB_PATH, get_assembler
 from app.api.schemas import ChatRequest
 from app.core.errors import sse_error_event
+from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.graph.graph import create_graph
+from app.services.knowledge_base_service import get_knowledge_base_service
 from app.utils.budget_ledger import BudgetLedger
 
 
@@ -18,20 +21,47 @@ logger = get_logger("iris.api.chat")
 
 
 @router.post("/chat")
-async def chat_endpoint(request: ChatRequest, http_request: Request):
+async def chat_endpoint(
+    request: ChatRequest,
+    http_request: Request,
+    context: RequestContext = Depends(get_request_context),
+):
     """
     Multi-turn research chat endpoint.
 
     The endpoint streams LangGraph node updates with SSE.
     """
-    assembler = await get_assembler()
+    kb_service = await get_knowledge_base_service()
+    knowledge_base_id = (
+        request.knowledge_base_id
+        or kb_service.default_knowledge_base_id(context.tenant_id)
+    )
+    kb = await kb_service.get_knowledge_base_for_tenant(
+        knowledge_base_id,
+        context.tenant_id,
+    )
+    if kb is None and knowledge_base_id == kb_service.default_knowledge_base_id(context.tenant_id):
+        kb = await kb_service.ensure_default_knowledge_base(
+            tenant_id=context.tenant_id,
+            created_by=context.user_id,
+        )
+    if kb is None:
+        raise AppError(
+            code="KNOWLEDGE_BASE_NOT_FOUND",
+            message="知识库不存在",
+            status_code=404,
+            details={"knowledge_base_id": knowledge_base_id},
+        )
 
+    assembler = await get_assembler()
     initial_state, ledger, memory = await assembler.prepare(
         query=request.query,
         search_mode=request.search_mode,
         session_id=request.session_id,
         pinned_turn_ids=request.pinned_turn_ids,
     )
+    initial_state["knowledge_base_id"] = knowledge_base_id
+    initial_state["tenant_id"] = context.tenant_id
 
     session_id = initial_state["session_id"]
     turn_id = initial_state["turn_id"]
@@ -54,6 +84,9 @@ async def chat_endpoint(request: ChatRequest, http_request: Request):
                 "session_id": session_id,
                 "turn_id": turn_id,
                 "search_mode": request.search_mode,
+                "knowledge_base_id": knowledge_base_id,
+                "tenant_id": context.tenant_id,
+                "user_id": context.user_id,
                 "window_k": memory.window_k,
                 "episodic_count": len(memory.episodic_memory),
                 "semantic_count": len(memory.semantic_memory),

@@ -14,6 +14,12 @@ def test_safe_summary_masks_secrets():
     assert "123456" not in str(summary)
     assert "environment" in summary
     assert "total_token_budget" in summary
+    assert "postgres_configured" in summary
+    assert "postgres_auto_migrate" in summary
+    assert "postgres_dsn" not in summary
+    assert "seed_default_password" not in summary
+    assert "jwt_secret_key" not in summary
+    assert "jwt_secret_configured" in summary
 
 
 def test_missing_required_secrets_raise_configuration_error():

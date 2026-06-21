@@ -48,6 +48,18 @@ class Settings(BaseSettings):
     redis_turn_full_ttl: int = 259_200
     redis_checkpoint_ttl: int = 604_800
 
+    knowledge_metadata_backend: Literal["redis", "postgres"] = "redis"
+    postgres_dsn: Optional[SecretStr] = None
+    postgres_auto_migrate: bool = True
+
+    seed_default_user_enabled: bool = False
+    seed_default_tenant_name: str = "默认租户"
+    seed_default_username: Optional[str] = None
+    seed_default_password: Optional[SecretStr] = None
+
+    jwt_secret_key: Optional[SecretStr] = None
+    jwt_access_token_ttl_seconds: int = 86_400
+
     total_token_budget: int = 128_000
 
     rag_chroma_db_path: Path = Field(default=APP_DIR / "rag" / "chroma_db")
@@ -102,6 +114,14 @@ class Settings(BaseSettings):
             "app_port": self.app_port,
             "redis_enabled": self.redis_enabled,
             "redis_url": self.redis_url,
+            "knowledge_metadata_backend": self.knowledge_metadata_backend,
+            "postgres_configured": bool(self.postgres_dsn),
+            "postgres_auto_migrate": self.postgres_auto_migrate,
+            "seed_default_user_enabled": self.seed_default_user_enabled,
+            "seed_default_username_configured": bool(self.seed_default_username),
+            "seed_default_password_configured": bool(self.seed_default_password),
+            "jwt_secret_configured": bool(self.jwt_secret_key),
+            "jwt_access_token_ttl_seconds": self.jwt_access_token_ttl_seconds,
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),
@@ -113,6 +133,14 @@ class Settings(BaseSettings):
             "upload_max_file_size_bytes": self.upload_max_file_size_bytes,
             "upload_allowed_extensions": self.upload_allowed_extensions,
         }
+
+    def jwt_secret(self) -> str:
+        value = self.secret_value(self.jwt_secret_key)
+        if value:
+            return value
+        if self.environment == "prod":
+            raise ConfigurationError("生产环境必须配置 JWT_SECRET_KEY。")
+        return "local-dev-insecure-jwt-secret"
 
 
 @lru_cache

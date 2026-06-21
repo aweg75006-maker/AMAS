@@ -9,16 +9,22 @@ logger = get_logger("iris.graph.researcher")
 def research_node(state: AgentState):
 
     mode = state.get("search_mode", "hybrid")
+    knowledge_base_id = state.get("knowledge_base_id", "kb_default")
     query = state["query"]
     plans = state["plan"]
     results = []
 
     logger.info(
         "researcher_started",
-        extra={"search_mode": mode, "query_length": len(query), "plan_count": len(plans)},
+        extra={
+            "search_mode": mode,
+            "knowledge_base_id": knowledge_base_id,
+            "query_length": len(query),
+            "plan_count": len(plans),
+        },
     )
     
-    retriever = get_retriever()
+    retriever = get_retriever(knowledge_base_id=knowledge_base_id)
     rag_content = ""
     is_doc_relevant = False
     

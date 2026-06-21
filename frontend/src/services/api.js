@@ -1,6 +1,30 @@
 // frontend/src/services/api.js
 
 const API_BASE = "http://localhost:8000/api";
+const AUTH_TOKEN_KEY = 'iris_access_token';
+
+function contextHeaders(baseHeaders = {}) {
+    const headers = { ...baseHeaders };
+    const token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+        return headers;
+    }
+    const TENANT_ID = localStorage.getItem('iris_tenant_id') || '';
+    const USER_ID = localStorage.getItem('iris_user_id') || '';
+    if (TENANT_ID) headers['X-Tenant-ID'] = TENANT_ID;
+    if (USER_ID) headers['X-User-ID'] = USER_ID;
+    return headers;
+}
+
+async function parseError(response, fallbackMessage) {
+    try {
+        const errorData = await response.json();
+        return errorData?.error?.message || errorData?.detail || fallbackMessage;
+    } catch (e) {
+        return fallbackMessage;
+    }
+}
 
 // ─── UUID 生成（向后兼容）───
 function generateUUID() {
@@ -76,34 +100,140 @@ export async function getSessionInfo(sessionId) {
   return await response.json();
 }
 
+export async function login(username, password) {
+  const response = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Login failed"));
+  }
+  const data = await response.json();
+  if (data.access_token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, data.access_token);
+    localStorage.setItem('iris_user_id', data.user?.user_id || '');
+    localStorage.setItem('iris_tenant_id', data.active_tenant_id || '');
+    localStorage.setItem('iris_username', data.user?.username || '');
+    localStorage.setItem('iris_role', data.role || '');
+  }
+  return data;
+}
+
+export function logout() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem('iris_user_id');
+  localStorage.removeItem('iris_tenant_id');
+  localStorage.removeItem('iris_username');
+  localStorage.removeItem('iris_role');
+}
+
+export function hasAuthToken() {
+  return Boolean(localStorage.getItem(AUTH_TOKEN_KEY));
+}
+
+export async function listMembers() {
+  const response = await fetch(`${API_BASE}/members`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load members"));
+  }
+  return await response.json();
+}
+
+export async function inviteMember({ username, email, display_name = '', role = 'member' }) {
+  const response = await fetch(`${API_BASE}/members`, {
+    method: "POST",
+    headers: contextHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ username, email, display_name, role }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to invite member"));
+  }
+  return await response.json();
+}
+
+export async function updateMemberRole(userId, role) {
+  const response = await fetch(`${API_BASE}/members/${userId}/role`, {
+    method: "PATCH",
+    headers: contextHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ role }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to update member role"));
+  }
+  return await response.json();
+}
+
+export async function disableMember(userId) {
+  const response = await fetch(`${API_BASE}/members/${userId}/disable`, {
+    method: "POST",
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to disable member"));
+  }
+  return await response.json();
+}
+
 // ─── 文件上传 ───
 
 /**
  * 批量上传文件
  * @param {Array<File>} files - 文件对象数组
  */
-export async function uploadFiles(files) {
+export async function uploadFiles(files, knowledgeBaseId = null) {
     const formData = new FormData();
     files.forEach(file => {
         formData.append('files', file);
     });
+    if (knowledgeBaseId) {
+        formData.append('knowledge_base_id', knowledgeBaseId);
+    }
 
     const response = await fetch(`${API_BASE}/upload`, {
         method: "POST",
+        headers: contextHeaders(),
         body: formData
     });
 
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Upload failed");
+        throw new Error(await parseError(response, "Upload failed"));
     }
 
     return await response.json();
 }
 
-export async function clearContext() {
-  const response = await fetch(`${API_BASE}/clear`, {
-      method: "POST"
+export async function listKnowledgeBases() {
+  const response = await fetch(`${API_BASE}/knowledge-bases`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load knowledge bases"));
+  }
+  return await response.json();
+}
+
+export async function listKnowledgeBaseDocuments(knowledgeBaseId) {
+  const response = await fetch(`${API_BASE}/knowledge-bases/${knowledgeBaseId}/documents`, {
+    headers: contextHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Failed to load knowledge base documents"));
+  }
+  return await response.json();
+}
+
+export async function clearContext(knowledgeBaseId = null) {
+  const params = new URLSearchParams();
+  if (knowledgeBaseId) {
+    params.set('knowledge_base_id', knowledgeBaseId);
+  }
+  const url = params.toString() ? `${API_BASE}/clear?${params.toString()}` : `${API_BASE}/clear`;
+  const response = await fetch(url, {
+      method: "POST",
+      headers: contextHeaders(),
   });
   if (!response.ok) throw new Error("Failed to clear context");
   return await response.json();
@@ -135,7 +265,8 @@ export async function streamChat(
   onDone,
   onError,
   onSession,
-  sessionId
+  sessionId,
+  knowledgeBaseId = null
 ) {
   try {
       // 自动获取或创建会话
@@ -145,12 +276,13 @@ export async function streamChat(
 
       const response = await fetch(`${API_BASE}/chat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: contextHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
               query: query,
               search_mode: search_mode,
               thread_id: SESSION_THREAD_ID,
               session_id: sessionId,
+              knowledge_base_id: knowledgeBaseId,
           }),
       });
 

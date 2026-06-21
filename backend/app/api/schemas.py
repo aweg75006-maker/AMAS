@@ -8,6 +8,7 @@ class ChatRequest(BaseModel):
     search_mode: str = "hybrid"
     thread_id: Optional[str] = None
     session_id: Optional[str] = None
+    knowledge_base_id: Optional[str] = None
     pinned_turn_ids: Optional[List[str]] = None
 
 
@@ -49,3 +50,25 @@ class TurnDetailResponse(BaseModel):
     token_usage: dict = {}
     timestamp: float = 0
     full_data: dict = {}
+
+
+class CreateKnowledgeBaseRequest(BaseModel):
+    name: str
+    description: str = ""
+    visibility: str = "private"
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class InviteMemberRequest(BaseModel):
+    username: str
+    email: str
+    display_name: str = ""
+    role: str = "member"
+
+
+class UpdateMemberRoleRequest(BaseModel):
+    role: str
