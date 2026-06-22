@@ -4,8 +4,8 @@
 
 IRIS 当前支持两套工作流执行引擎：
 
-- `langgraph`：默认引擎，保持现有稳定行为
-- `python`：纯 Python Harness/Loop Engine，用于逐步替换 LangGraph
+- `python`：默认引擎，纯 Python Harness/Loop Engine
+- `langgraph`：保留为回滚引擎
 
 两套引擎共用：
 
@@ -18,16 +18,16 @@ IRIS 当前支持两套工作流执行引擎：
 
 ## 配置方式
 
-默认使用 LangGraph：
-
-```bash
-WORKFLOW_ENGINE=langgraph
-```
-
-启用纯 Python 引擎：
+默认使用纯 Python 引擎：
 
 ```bash
 WORKFLOW_ENGINE=python
+```
+
+回滚到 LangGraph：
+
+```bash
+WORKFLOW_ENGINE=langgraph
 ```
 
 本地临时启动示例：
@@ -37,23 +37,23 @@ cd /Users/zhang/Downloads/chrome/IRIS-main/backend
 WORKFLOW_ENGINE=python conda run -n iris uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-回滚到 LangGraph：
+如果不设置环境变量，当前默认值也是：
 
 ```bash
-WORKFLOW_ENGINE=langgraph
+WORKFLOW_ENGINE=python
 ```
 
 ## 灰度建议
 
 推荐顺序：
 
-1. 本地使用 `WORKFLOW_ENGINE=python` 跑后端测试
-2. 测试环境切到 `python`
+1. 默认使用 `WORKFLOW_ENGINE=python` 跑后端测试
+2. 测试环境保持 `python`
 3. 验证 `/api/chat` SSE 输出、chat history、tool runs、route decisions
-4. 小流量环境切到 `python`
-5. 稳定后再考虑默认值从 `langgraph` 改成 `python`
+4. 小流量环境保持 `python`
+5. 稳定后移除 LangGraph 依赖和 checkpoint 代码
 
-生产默认值暂时保持：
+回滚默认值：
 
 ```bash
 WORKFLOW_ENGINE=langgraph
@@ -142,7 +142,7 @@ refiner -> __end__
 workflow_route_decisions
 ```
 
-LangGraph 默认路径目前仍保留，但 route decision trace 不如 Python Engine 完整。
+LangGraph 路径目前仍保留为回滚通道，但 route decision trace 不如 Python Engine 完整。
 
 ## 回滚条件
 
@@ -163,7 +163,6 @@ WORKFLOW_ENGINE=langgraph
 ## 后续替换路线
 
 1. 保持双引擎对齐测试持续通过
-2. 在测试环境默认启用 `python`
+2. 默认使用 `python`
 3. 增强 route decision 可视化/API
-4. 稳定后将默认引擎改为 `python`
-5. 最后移除 LangGraph 依赖和 checkpoint 代码
+4. 观察稳定后移除 LangGraph 依赖和 checkpoint 代码

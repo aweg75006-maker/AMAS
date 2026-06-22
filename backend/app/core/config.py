@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     prompt_version: str = "prompt.v1"
     node_policy_version: str = "node-policy.v1"
     harness_manifest: str = "default_research.json"
-    workflow_engine: Literal["langgraph", "python"] = "langgraph"
+    workflow_engine: Literal["langgraph", "python"] = "python"
 
     total_token_budget: int = 128_000
 
