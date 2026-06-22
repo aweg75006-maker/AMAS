@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.permissions import WRITE_ROLES, require_roles
 from app.core.exceptions import AppError
 from app.core.identity import RequestContext
-from app.services.workflow_runtime_service import workflow_runtime_fingerprint
+from app.services.workflow_runtime_service import workflow_runtime_diagnostics
 from app.services.workflow_trace_service import get_workflow_trace_service
 
 
@@ -17,7 +17,7 @@ async def get_workflow_runtime_endpoint(
 ):
     return {
         "tenant_id": context.tenant_id,
-        "runtime": workflow_runtime_fingerprint(),
+        "runtime": workflow_runtime_diagnostics(),
     }
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.core.config import settings
 from app.harness.registry import harness_fingerprint
+from app.tools.registry import get_tool_registry
 
 
 def workflow_runtime_fingerprint() -> dict[str, object]:
@@ -45,3 +46,33 @@ def workflow_runtime_metadata(extra: dict | None = None) -> dict[str, object]:
     if extra:
         metadata = {**metadata, **extra}
     return metadata
+
+
+def workflow_runtime_diagnostics() -> dict[str, object]:
+    """Human-oriented workflow runtime diagnostics for rollout checks."""
+
+    runtime = workflow_runtime_fingerprint()
+    tool_specs = get_tool_registry().list_specs()
+    return {
+        **runtime,
+        "diagnostics": {
+            "active_engine": settings.workflow_engine,
+            "available_engines": ["langgraph", "python"],
+            "route_decision_trace_enabled": settings.workflow_engine == "python",
+            "tool_trace_enabled": True,
+            "node_trace_enabled": True,
+            "rollback_engine": "langgraph",
+            "python_engine_ready": True,
+        },
+        "registered_tools": [
+            {
+                "name": spec.name,
+                "description": spec.description,
+                "version": spec.version,
+                "input_schema": spec.input_schema,
+                "output_schema": spec.output_schema,
+                "tags": list(spec.tags),
+            }
+            for spec in tool_specs
+        ],
+    }
