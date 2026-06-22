@@ -14,6 +14,8 @@ def workflow_runtime_fingerprint() -> dict[str, object]:
         "prompt_version": settings.prompt_version,
         "node_policy_version": settings.node_policy_version,
         "workflow_engine": settings.workflow_engine,
+        "primary_engine": "python",
+        "legacy_fallback_engine": "langgraph",
         "harness": harness,
         "models": {
             "fast": settings.llm_fast_model,
@@ -56,12 +58,28 @@ def workflow_runtime_diagnostics() -> dict[str, object]:
 
     runtime = workflow_runtime_fingerprint()
     tool_specs = get_tool_registry().list_specs()
+    legacy_fallback_active = settings.workflow_engine == "langgraph"
+    warnings = []
+    if legacy_fallback_active:
+        warnings.append(
+            {
+                "warning_code": "LEGACY_WORKFLOW_ENGINE_ACTIVE",
+                "message": (
+                    "LangGraph is a legacy fallback; python is the primary "
+                    "production engine."
+                ),
+                "production_recommended": False,
+            }
+        )
     return {
         **runtime,
         "diagnostics": {
             "active_engine": settings.workflow_engine,
             "primary_engine": "python",
             "legacy_fallback_engine": "langgraph",
+            "legacy_fallback_active": legacy_fallback_active,
+            "production_recommended": not legacy_fallback_active,
+            "warnings": warnings,
             "available_engines": ["python", "langgraph"],
             "route_decision_trace_enabled": settings.workflow_engine == "python",
             "tool_trace_enabled": True,
