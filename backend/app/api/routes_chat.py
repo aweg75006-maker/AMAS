@@ -9,9 +9,11 @@ from app.api.context import RequestContext, get_request_context
 from app.api.dependencies import get_assembler
 from app.api.rate_limits import chat_rate_limit
 from app.api.schemas import ChatRequest
+from app.core.config import settings
 from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
+from app.graph.engine import WorkflowEngineExecutionError
 from app.graph.engine_factory import create_workflow_engine
 from app.graph.runtime import WorkflowNodeExecutionError
 from app.models.domain import WorkflowRunStatus
@@ -97,6 +99,7 @@ async def chat_endpoint(
         initial_state["request_id"] = request_id
         initial_state["user_id"] = context.user_id
         initial_state["username"] = context.username
+        run_finished = False
 
         logger.info(
             "chat_started",
@@ -204,17 +207,14 @@ async def chat_endpoint(
                 status=WorkflowRunStatus.SUCCEEDED.value,
                 metadata={"turn_number": turn_record.turn_number},
             )
+            run_finished = True
 
         except Exception as e:
-            error_code = "CHAT_STREAM_FAILED"
-            node_name = ""
-            attempts = 1
-            duration_ms = 0
-            if isinstance(e, WorkflowNodeExecutionError):
-                error_code = e.error_code
-                node_name = e.node_name
-                attempts = e.attempts
-                duration_ms = e.duration_ms
+            failure = _workflow_failure_snapshot(e)
+            error_code = failure["error_code"]
+            node_name = failure["node_name"]
+            attempts = failure["attempts"]
+            duration_ms = failure["duration_ms"]
             logger.exception(
                 "chat_stream_failed",
                 extra={
@@ -225,40 +225,27 @@ async def chat_endpoint(
                     "node_name": node_name,
                 },
             )
-            if node_name:
-                await trace_service.record_node_failure(
-                    run=workflow_run,
-                    node_name=node_name,
-                    error_code=error_code,
-                    error_message=str(e),
-                    duration_ms=duration_ms,
-                    attempts=attempts,
-                )
-            await trace_service.finish_run(
-                workflow_run,
-                status=WorkflowRunStatus.FAILED.value,
-                error_code=error_code,
-                error_message=str(e),
-            )
-            await trace_service.record_error_event(
-                error_code=error_code,
-                message="任务执行失败",
-                source="workflow",
+            run_finished = await _record_workflow_failure(
+                trace_service=trace_service,
+                workflow_run=workflow_run,
                 context=context,
                 request_id=request_id,
                 session_id=session_id,
                 turn_id=turn_id,
-                run_id=workflow_run.run_id,
-                node_name=node_name,
                 path=str(http_request.url.path),
-                status_code=500,
-                details={"reason": str(e), "attempts": attempts},
+                exc=e,
+                failure=failure,
+                run_finished=run_finished,
             )
             yield sse_error_event(
                 code=error_code,
                 message="任务执行失败",
                 request_id=request_id,
-                details={"reason": str(e), "session_id": session_id, "turn_id": turn_id},
+                details={
+                    "reason": str(e),
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                },
             )
 
         yield "data: [DONE]\n\n"
@@ -304,3 +291,105 @@ def _record_node_token_estimate(
 def _public_state_update(state_update: dict) -> dict:
     """Hide internal observability fields from the SSE payload."""
     return {key: value for key, value in state_update.items() if not key.startswith("_")}
+
+
+def _workflow_failure_snapshot(exc: Exception) -> dict:
+    """Normalize workflow failures for durable run/error trace records."""
+
+    error_code = "CHAT_STREAM_FAILED"
+    node_name = ""
+    attempts = 1
+    duration_ms = 0
+    details = {
+        "reason": str(exc),
+        "attempts": attempts,
+        "engine": settings.workflow_engine,
+        "workflow_run_timeout_seconds": settings.workflow_run_timeout_seconds,
+    }
+
+    if isinstance(exc, WorkflowNodeExecutionError):
+        error_code = exc.error_code
+        node_name = exc.node_name
+        attempts = exc.attempts
+        duration_ms = exc.duration_ms
+        details.update(
+            {
+                "attempts": attempts,
+                "duration_ms": duration_ms,
+                "node_name": node_name,
+            }
+        )
+    elif isinstance(exc, WorkflowEngineExecutionError):
+        error_code = exc.error_code
+        node_name = exc.current_node
+        duration_ms = exc.elapsed_ms
+        details.update(
+            {
+                **exc.details,
+                "duration_ms": duration_ms,
+                "elapsed_ms": exc.elapsed_ms,
+                "step_index": exc.step_index,
+                "current_node": exc.current_node,
+                "node_name": node_name,
+            }
+        )
+
+    return {
+        "error_code": error_code,
+        "node_name": node_name,
+        "attempts": attempts,
+        "duration_ms": duration_ms,
+        "details": details,
+    }
+
+
+async def _record_workflow_failure(
+    *,
+    trace_service,
+    workflow_run,
+    context: RequestContext,
+    request_id: str,
+    session_id: str,
+    turn_id: str,
+    path: str,
+    exc: Exception,
+    failure: dict,
+    run_finished: bool,
+) -> bool:
+    error_code = failure["error_code"]
+    node_name = failure["node_name"]
+    attempts = failure["attempts"]
+    duration_ms = failure["duration_ms"]
+
+    if node_name:
+        await trace_service.record_node_failure(
+            run=workflow_run,
+            node_name=node_name,
+            error_code=error_code,
+            error_message=str(exc),
+            duration_ms=duration_ms,
+            attempts=attempts,
+        )
+    if not run_finished:
+        await trace_service.finish_run(
+            workflow_run,
+            status=WorkflowRunStatus.FAILED.value,
+            error_code=error_code,
+            error_message=str(exc),
+        )
+        run_finished = True
+    await trace_service.record_error_event(
+        error_code=error_code,
+        message="任务执行失败",
+        source="workflow",
+        context=context,
+        request_id=request_id,
+        session_id=session_id,
+        turn_id=turn_id,
+        run_id=workflow_run.run_id,
+        node_name=node_name,
+        path=path,
+        status_code=500,
+        details=failure["details"],
+    )
+    return run_finished
