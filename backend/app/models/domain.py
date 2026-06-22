@@ -662,6 +662,54 @@ class WorkflowToolRunRecord:
 
 
 @dataclass
+class WorkflowRouteDecisionRecord:
+    """Trace for one workflow routing decision between nodes."""
+
+    decision_id: str
+    run_id: str
+    from_node: str
+    to_node: str
+    reason: str
+    tenant_id: str
+    session_id: str = ""
+    turn_id: str = ""
+    created_at: float = field(default_factory=time.time)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "decision_id": self.decision_id,
+            "run_id": self.run_id,
+            "from_node": self.from_node,
+            "to_node": self.to_node,
+            "reason": self.reason,
+            "tenant_id": self.tenant_id,
+            "session_id": self.session_id,
+            "turn_id": self.turn_id,
+            "created_at": str(self.created_at),
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "WorkflowRouteDecisionRecord":
+        metadata = d.get("metadata", {})
+        if isinstance(metadata, str):
+            metadata = json.loads(metadata or "{}")
+        return cls(
+            decision_id=d.get("decision_id", ""),
+            run_id=d.get("run_id", ""),
+            from_node=d.get("from_node", ""),
+            to_node=d.get("to_node", ""),
+            reason=d.get("reason", ""),
+            tenant_id=d.get("tenant_id", ""),
+            session_id=d.get("session_id", ""),
+            turn_id=d.get("turn_id", ""),
+            created_at=float(d.get("created_at", 0) or 0),
+            metadata=metadata or {},
+        )
+
+
+@dataclass
 class ErrorEventRecord:
     """Durable error event for API and Agent workflow failures."""
 

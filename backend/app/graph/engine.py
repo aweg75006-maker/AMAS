@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any
+from uuid import uuid4
 
 from app.core.logging import get_logger
 from app.graph.nodes.planner import plan_node
@@ -45,9 +47,10 @@ class PythonWorkflowEngine:
         config: dict | None = None,
     ) -> AsyncIterator[dict[str, dict]]:
         state: AgentState = dict(initial_state)
-        next_node = self._route_entry(state)
+        next_node, entry_decision = self._route_entry(state)
         max_steps = self._max_steps()
         steps = 0
+        pending_decision = entry_decision
 
         while next_node != self.END:
             steps += 1
@@ -56,17 +59,32 @@ class PythonWorkflowEngine:
 
             node_name = next_node
             node_update = await self._run_node(node_name, state)
+            if pending_decision is not None:
+                node_update = {
+                    **node_update,
+                    "_route_decisions": [pending_decision],
+                }
             state.update(node_update)
             yield {node_name: node_update}
-            next_node = self._next_node(node_name, state)
+            next_node, pending_decision = self._next_node(node_name, state)
 
-    def _route_entry(self, state: AgentState) -> str:
+    def _route_entry(self, state: AgentState) -> tuple[str, dict]:
         route = route_query(state)
         if route not in {"planner", "refiner"}:
             logger.warning("workflow_entry_route_invalid", extra={"route": route})
-            return "planner"
+            return "planner", self._decision_snapshot(
+                from_node="__start__",
+                to_node="planner",
+                reason="workflow_entry_route_invalid",
+                metadata={"raw_route": route},
+            )
         logger.info("workflow_entry_routed", extra={"next_node": route})
-        return route
+        return route, self._decision_snapshot(
+            from_node="__start__",
+            to_node=route,
+            reason="workflow_entry_routed",
+            metadata={"route": route},
+        )
 
     async def _run_node(self, node_name: str, state: AgentState) -> dict:
         try:
@@ -78,30 +96,72 @@ class PythonWorkflowEngine:
             raise RuntimeError(f"workflow node returned non-dict: {node_name}")
         return result
 
-    def _next_node(self, node_name: str, state: AgentState) -> str:
+    def _next_node(self, node_name: str, state: AgentState) -> tuple[str, dict | None]:
         if node_name == "planner":
-            return "researcher"
+            return "researcher", self._decision_snapshot(
+                from_node="planner",
+                to_node="researcher",
+                reason="planner_completed",
+            )
         if node_name == "researcher":
             decision = self.loop_policy.after_research(state)
             logger.info(decision.reason, extra=decision.metadata)
-            return decision.next_node
+            return decision.next_node, self._decision_snapshot(
+                from_node="researcher",
+                to_node=decision.next_node,
+                reason=decision.reason,
+                metadata=decision.metadata,
+            )
         if node_name == "writer":
-            return "reviewer"
+            return "reviewer", self._decision_snapshot(
+                from_node="writer",
+                to_node="reviewer",
+                reason="writer_completed",
+            )
         if node_name == "reviewer":
             decision = self.loop_policy.after_review(state)
             if decision.reason == "review_max_revisions_reached":
                 logger.warning(decision.reason, extra=decision.metadata)
             else:
                 logger.info(decision.reason, extra=decision.metadata)
-            return decision.next_node
+            return decision.next_node, self._decision_snapshot(
+                from_node="reviewer",
+                to_node=decision.next_node,
+                reason=decision.reason,
+                metadata=decision.metadata,
+            )
         if node_name == "refiner":
-            return self.END
+            return self.END, self._decision_snapshot(
+                from_node="refiner",
+                to_node=self.END,
+                reason="refiner_completed",
+            )
         raise RuntimeError(f"workflow node has no outgoing route: {node_name}")
 
     def _max_steps(self) -> int:
         # Initial pass is planner/researcher/writer/reviewer. Each failed review can
         # add a replan path or a rewrite path. Keep a small buffer for refine flow.
         return 4 + get_harness_manifest().max_revisions * 4 + 2
+
+    def _decision_snapshot(
+        self,
+        *,
+        from_node: str,
+        to_node: str,
+        reason: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "decision_id": f"route_{uuid4().hex[:16]}",
+            "from_node": from_node,
+            "to_node": to_node,
+            "reason": reason,
+            "created_at": time.time(),
+            "metadata": {
+                "engine": "python",
+                **(metadata or {}),
+            },
+        }
 
 
 def create_python_workflow_engine() -> PythonWorkflowEngine:

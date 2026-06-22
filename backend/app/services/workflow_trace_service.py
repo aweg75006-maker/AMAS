@@ -9,6 +9,7 @@ from app.models.domain import (
     ErrorEventRecord,
     WorkflowNodeRunRecord,
     WorkflowNodeStatus,
+    WorkflowRouteDecisionRecord,
     WorkflowRunRecord,
     WorkflowRunStatus,
     WorkflowToolRunRecord,
@@ -176,6 +177,30 @@ class WorkflowTraceService:
         await self.repository.save_tool_run(tool_run)
         return tool_run
 
+    async def record_route_decision(
+        self,
+        *,
+        run: WorkflowRunRecord,
+        decision_snapshot: dict,
+    ) -> WorkflowRouteDecisionRecord:
+        decision = WorkflowRouteDecisionRecord(
+            decision_id=decision_snapshot.get("decision_id") or f"route_{uuid4().hex[:16]}",
+            run_id=run.run_id,
+            from_node=decision_snapshot.get("from_node", ""),
+            to_node=decision_snapshot.get("to_node", ""),
+            reason=decision_snapshot.get("reason", ""),
+            tenant_id=run.tenant_id,
+            session_id=run.session_id,
+            turn_id=run.turn_id,
+            created_at=float(decision_snapshot.get("created_at", time.time()) or time.time()),
+            metadata={
+                **(decision_snapshot.get("metadata") or {}),
+                "runtime": workflow_runtime_fingerprint(),
+            },
+        )
+        await self.repository.save_route_decision(decision)
+        return decision
+
     async def record_error_event(
         self,
         *,
@@ -229,13 +254,15 @@ class WorkflowTraceService:
         WorkflowRunRecord,
         list[WorkflowNodeRunRecord],
         list[WorkflowToolRunRecord],
+        list[WorkflowRouteDecisionRecord],
     ] | None:
         run = await self.repository.get_workflow_run(run_id)
         if run is None or run.tenant_id != tenant_id:
             return None
         nodes = await self.repository.list_node_runs(run_id)
         tools = await self.repository.list_tool_runs(run_id)
-        return run, nodes, tools
+        route_decisions = await self.repository.list_route_decisions(run_id)
+        return run, nodes, tools, route_decisions
 
     async def list_error_events(
         self,

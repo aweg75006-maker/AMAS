@@ -10,6 +10,7 @@ from app.db.migrations import run_postgres_migrations
 from app.models.domain import (
     ErrorEventRecord,
     WorkflowNodeRunRecord,
+    WorkflowRouteDecisionRecord,
     WorkflowRunRecord,
     WorkflowToolRunRecord,
 )
@@ -27,6 +28,9 @@ class WorkflowTraceRepository(Protocol):
     async def save_tool_run(self, tool_run: WorkflowToolRunRecord) -> None:
         ...
 
+    async def save_route_decision(self, decision: WorkflowRouteDecisionRecord) -> None:
+        ...
+
     async def save_error_event(self, event: ErrorEventRecord) -> None:
         ...
 
@@ -40,6 +44,9 @@ class WorkflowTraceRepository(Protocol):
         ...
 
     async def list_tool_runs(self, run_id: str) -> list[WorkflowToolRunRecord]:
+        ...
+
+    async def list_route_decisions(self, run_id: str) -> list[WorkflowRouteDecisionRecord]:
         ...
 
     async def list_error_events(self, tenant_id: str, *, limit: int = 50) -> list[ErrorEventRecord]:
@@ -202,6 +209,35 @@ class PostgresWorkflowTraceRepository:
                 json.dumps(tool_run.metadata, ensure_ascii=False),
             )
 
+    async def save_route_decision(self, decision: WorkflowRouteDecisionRecord) -> None:
+        pool = await self._require_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO workflow_route_decisions (
+                    decision_id, run_id, from_node, to_node, reason, tenant_id,
+                    session_id, turn_id, created_at, metadata
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb
+                )
+                ON CONFLICT (decision_id) DO UPDATE SET
+                    to_node = EXCLUDED.to_node,
+                    reason = EXCLUDED.reason,
+                    metadata = EXCLUDED.metadata
+                """,
+                decision.decision_id,
+                decision.run_id,
+                decision.from_node,
+                decision.to_node,
+                decision.reason,
+                decision.tenant_id,
+                decision.session_id,
+                decision.turn_id,
+                decision.created_at,
+                json.dumps(decision.metadata, ensure_ascii=False),
+            )
+
     async def save_error_event(self, event: ErrorEventRecord) -> None:
         pool = await self._require_pool()
         async with pool.acquire() as conn:
@@ -291,6 +327,19 @@ class PostgresWorkflowTraceRepository:
                 run_id,
             )
         return [WorkflowToolRunRecord.from_dict(dict(row)) for row in rows]
+
+    async def list_route_decisions(self, run_id: str) -> list[WorkflowRouteDecisionRecord]:
+        pool = await self._require_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM workflow_route_decisions
+                WHERE run_id = $1
+                ORDER BY created_at ASC
+                """,
+                run_id,
+            )
+        return [WorkflowRouteDecisionRecord.from_dict(dict(row)) for row in rows]
 
     async def list_error_events(
         self,

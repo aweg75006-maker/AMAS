@@ -157,6 +157,11 @@ async def chat_endpoint(
                                     "reason": tool_run.error_message,
                                 },
                             )
+                    for route_snapshot in state_update.get("_route_decisions", []):
+                        await trace_service.record_route_decision(
+                            run=workflow_run,
+                            decision_snapshot=route_snapshot,
+                        )
 
                     public_state_update = _public_state_update(state_update)
                     data = json.dumps(

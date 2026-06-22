@@ -64,7 +64,7 @@ class AgentState(TypedDict, total=False):
         budget_state, token_usage_current_turn, token_usage_session_total
 
     内部观测字段（可选）：
-        _tool_runs
+        _tool_runs, _route_decisions
     """
 
     # ─── 原有字段 ───
@@ -99,3 +99,4 @@ class AgentState(TypedDict, total=False):
     token_usage_current_turn: TokenUsageDict  # 当前 Turn 累计
     token_usage_session_total: TokenUsageDict  # 会话累计
     _tool_runs: List[Dict[str, Any]]           # 当前节点产生的工具调用快照
+    _route_decisions: List[Dict[str, Any]]     # 当前节点关联的路由决策快照

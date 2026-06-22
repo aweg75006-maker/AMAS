@@ -3,6 +3,7 @@ import pytest
 from app.models.domain import (
     ErrorEventRecord,
     WorkflowNodeRunRecord,
+    WorkflowRouteDecisionRecord,
     WorkflowRunRecord,
     WorkflowToolRunRecord,
 )
@@ -48,6 +49,17 @@ async def test_postgres_workflow_trace_repository_save_methods():
             metadata={"attempts": 2},
         )
     )
+    await repository.save_route_decision(
+        WorkflowRouteDecisionRecord(
+            decision_id="route_1",
+            run_id="run_1",
+            from_node="reviewer",
+            to_node="writer",
+            reason="review_failed_routing_to_writer",
+            tenant_id="tenant_1",
+            metadata={"review_action": "rewrite"},
+        )
+    )
     await repository.save_error_event(
         ErrorEventRecord(
             error_event_id="err_1",
@@ -62,11 +74,13 @@ async def test_postgres_workflow_trace_repository_save_methods():
     assert "INSERT INTO workflow_runs" in joined_sql
     assert "INSERT INTO workflow_node_runs" in joined_sql
     assert "INSERT INTO workflow_tool_runs" in joined_sql
+    assert "INSERT INTO workflow_route_decisions" in joined_sql
     assert "INSERT INTO error_events" in joined_sql
     assert conn.executed[0][1][16] == '{"thread_id": "turn_1"}'
     assert conn.executed[1][1][12] == '{"estimated": 1}'
     assert conn.executed[2][1][15] == '{"attempts": 2}'
-    assert conn.executed[3][1][15] == '{"reason": "boom"}'
+    assert conn.executed[3][1][9] == '{"review_action": "rewrite"}'
+    assert conn.executed[4][1][15] == '{"reason": "boom"}'
 
 
 @pytest.mark.asyncio
@@ -136,4 +150,34 @@ async def test_postgres_workflow_trace_repository_lists_tool_runs():
     assert tool_runs[0].tool_name == "rag.retrieve"
     assert tool_runs[0].metadata["attempts"] == 1
     assert "workflow_tool_runs" in conn.last_fetch_sql
+    assert conn.last_fetch_args == ("run_1",)
+
+
+@pytest.mark.asyncio
+async def test_postgres_workflow_trace_repository_lists_route_decisions():
+    conn = FakeConnection()
+    conn.rows["fetch"] = [
+        {
+            "decision_id": "route_1",
+            "run_id": "run_1",
+            "from_node": "reviewer",
+            "to_node": "writer",
+            "reason": "review_failed_routing_to_writer",
+            "tenant_id": "tenant_1",
+            "session_id": "iris_1",
+            "turn_id": "turn_1",
+            "created_at": 1.0,
+            "metadata": {"review_action": "rewrite"},
+        }
+    ]
+    repository = PostgresWorkflowTraceRepository("postgresql://example")
+    repository._pool = FakePool(conn)
+
+    decisions = await repository.list_route_decisions("run_1")
+
+    assert len(decisions) == 1
+    assert decisions[0].from_node == "reviewer"
+    assert decisions[0].to_node == "writer"
+    assert decisions[0].metadata["review_action"] == "rewrite"
+    assert "workflow_route_decisions" in conn.last_fetch_sql
     assert conn.last_fetch_args == ("run_1",)

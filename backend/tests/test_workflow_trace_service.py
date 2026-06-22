@@ -54,6 +54,16 @@ async def test_workflow_trace_service_records_run_node_and_error():
                 "metadata": {"attempts": 2},
             },
         )
+        await service.record_route_decision(
+            run=run,
+            decision_snapshot={
+                "from_node": "reviewer",
+                "to_node": "writer",
+                "reason": "review_failed_routing_to_writer",
+                "created_at": run.started_at + 0.2,
+                "metadata": {"review_action": "rewrite"},
+            },
+        )
         await service.finish_run(run, status=WorkflowRunStatus.SUCCEEDED.value)
         await service.record_error_event(
             error_code="TRACE_TEST_ERROR",
@@ -71,7 +81,7 @@ async def test_workflow_trace_service_records_run_node_and_error():
         errors = await service.list_error_events("tenant_trace", limit=20)
 
         assert result is not None
-        restored_run, nodes, tools = result
+        restored_run, nodes, tools, route_decisions = result
         assert restored_run.status == WorkflowRunStatus.SUCCEEDED.value
         assert restored_run.metadata["workflow_version"]
         assert restored_run.metadata["prompt_version"]
@@ -80,6 +90,9 @@ async def test_workflow_trace_service_records_run_node_and_error():
         assert tools[0].tool_name == "web.search"
         assert tools[0].status == "failed"
         assert tools[0].metadata["attempts"] == 2
+        assert route_decisions[0].from_node == "reviewer"
+        assert route_decisions[0].to_node == "writer"
+        assert route_decisions[0].metadata["review_action"] == "rewrite"
         assert any(event.error_code == "TRACE_TEST_ERROR" for event in errors)
     finally:
         await repository.close()

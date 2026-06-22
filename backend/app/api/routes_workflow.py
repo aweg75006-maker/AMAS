@@ -51,11 +51,12 @@ async def get_workflow_run_endpoint(
             status_code=404,
             details={"run_id": run_id},
         )
-    run, nodes, tools = result
+    run, nodes, tools, route_decisions = result
     return {
         "run": run.to_dict(),
         "nodes": [node.to_dict() for node in nodes],
         "tools": [tool.to_dict() for tool in tools],
+        "route_decisions": [decision.to_dict() for decision in route_decisions],
     }
 
 

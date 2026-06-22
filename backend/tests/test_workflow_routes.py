@@ -53,6 +53,16 @@ def _persist_workflow_run():
                     "metadata": {"attempts": 1},
                 },
             )
+            await service.record_route_decision(
+                run=run,
+                decision_snapshot={
+                    "from_node": "reviewer",
+                    "to_node": "writer",
+                    "reason": "review_failed_routing_to_writer",
+                    "created_at": run.started_at + 0.2,
+                    "metadata": {"review_action": "rewrite"},
+                },
+            )
             await service.finish_run(run, status=WorkflowRunStatus.SUCCEEDED.value)
             await service.record_error_event(
                 error_code="ROUTE_TRACE_ERROR",
@@ -100,6 +110,7 @@ def test_owner_can_list_and_get_workflow_run(client):
     assert detail.json()["run"]["run_id"] == run_id
     assert detail.json()["nodes"][0]["node_name"] == "writer"
     assert detail.json()["tools"][0]["tool_name"] == "rag.retrieve"
+    assert detail.json()["route_decisions"][0]["to_node"] == "writer"
     assert errors.status_code == 200
     assert any(item["error_code"] == "ROUTE_TRACE_ERROR" for item in errors.json()["items"])
     assert runtime.status_code == 200

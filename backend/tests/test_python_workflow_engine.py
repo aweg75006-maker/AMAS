@@ -54,6 +54,9 @@ async def test_python_workflow_engine_runs_happy_path(monkeypatch):
         "writer",
         "reviewer",
     ]
+    assert events[0]["planner"]["_route_decisions"][0]["from_node"] == "__start__"
+    assert events[1]["researcher"]["_route_decisions"][0]["from_node"] == "planner"
+    assert events[-1]["reviewer"]["_route_decisions"][0]["to_node"] == "reviewer"
 
 
 @pytest.mark.asyncio
@@ -100,6 +103,9 @@ async def test_python_workflow_engine_routes_rewrite_to_writer(monkeypatch):
         "writer",
         "reviewer",
     ]
+    assert events[4]["writer"]["_route_decisions"][0]["reason"] == (
+        "review_failed_routing_to_writer"
+    )
 
 
 @pytest.mark.asyncio
@@ -119,3 +125,4 @@ async def test_python_workflow_engine_refine_path(monkeypatch):
 
     assert [list(event)[0] for event in events] == ["refiner"]
     assert events[0]["refiner"]["final_report"] == "refined"
+    assert events[0]["refiner"]["_route_decisions"][0]["to_node"] == "refiner"
