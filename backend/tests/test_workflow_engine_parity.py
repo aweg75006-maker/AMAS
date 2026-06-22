@@ -1,8 +1,9 @@
 import pytest
 
 from app.graph import engine as python_engine_module
-from app.graph import graph as legacy_langgraph_module
 from app.graph.engine import PythonWorkflowEngine
+
+pytestmark = pytest.mark.legacy_langgraph
 
 
 async def _collect_python_steps(state):
@@ -14,6 +15,8 @@ async def _collect_python_steps(state):
 
 
 async def _collect_legacy_langgraph_steps(state):
+    from app.graph import graph as legacy_langgraph_module
+
     graph = legacy_langgraph_module.create_graph()
     steps = []
     async for event in graph.astream(
@@ -35,6 +38,8 @@ async def _collect_legacy_langgraph_steps_with_patch(monkeypatch, state, **patch
 
 
 def _patch_both_engines(monkeypatch, *, route="planner", review_sequence=None):
+    from app.graph import graph as legacy_langgraph_module
+
     review_sequence = list(review_sequence or [("PASS", "none", "")])
     review_calls = {"count": 0}
 
