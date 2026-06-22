@@ -203,6 +203,8 @@ def test_workflow_run_and_node_round_trip():
 
     assert restored_run.run_id == "run_1"
     assert restored_run.metadata == {"thread_id": "turn_1"}
+    assert WorkflowRunStatus.CANCELLED.value == "cancelled"
+    assert AuditAction.WORKFLOW_RUN_CANCELLED.value == "workflow_run.cancelled"
     assert restored_node.node_name == "writer"
     assert restored_node.token_usage == {"estimated": 1}
 

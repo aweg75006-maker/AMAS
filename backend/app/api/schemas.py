@@ -72,3 +72,7 @@ class InviteMemberRequest(BaseModel):
 
 class UpdateMemberRoleRequest(BaseModel):
     role: str
+
+
+class CancelWorkflowRunRequest(BaseModel):
+    reason: str = ""

@@ -360,6 +360,7 @@ async def _record_workflow_failure(
     node_name = failure["node_name"]
     attempts = failure["attempts"]
     duration_ms = failure["duration_ms"]
+    cancelled = error_code == "WORKFLOW_RUN_CANCELLED"
 
     if node_name:
         await trace_service.record_node_failure(
@@ -370,7 +371,7 @@ async def _record_workflow_failure(
             duration_ms=duration_ms,
             attempts=attempts,
         )
-    if not run_finished:
+    if not run_finished and not cancelled:
         await trace_service.finish_run(
             workflow_run,
             status=WorkflowRunStatus.FAILED.value,

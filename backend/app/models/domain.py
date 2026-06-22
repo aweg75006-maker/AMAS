@@ -53,6 +53,7 @@ class AuditAction(str, Enum):
     MEMBER_CREATED = "member.created"
     MEMBER_ROLE_UPDATED = "member.role_updated"
     MEMBER_DISABLED = "member.disabled"
+    WORKFLOW_RUN_CANCELLED = "workflow_run.cancelled"
 
 
 class ChatSessionStatus(str, Enum):
@@ -64,6 +65,7 @@ class WorkflowRunStatus(str, Enum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class WorkflowNodeStatus(str, Enum):

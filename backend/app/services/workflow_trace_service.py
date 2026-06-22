@@ -79,6 +79,46 @@ class WorkflowTraceService:
         await self.repository.save_workflow_run(run)
         return run
 
+    async def cancel_run(
+        self,
+        *,
+        tenant_id: str,
+        run_id: str,
+        cancelled_by: str,
+        reason: str = "",
+    ) -> WorkflowRunRecord | None:
+        run = await self.repository.get_workflow_run(run_id)
+        if run is None or run.tenant_id != tenant_id:
+            return None
+        if run.status != WorkflowRunStatus.RUNNING.value:
+            return run
+
+        now = time.time()
+        run.status = WorkflowRunStatus.CANCELLED.value
+        run.finished_at = now
+        run.duration_ms = int((now - run.started_at) * 1000)
+        run.error_code = "WORKFLOW_RUN_CANCELLED"
+        run.error_message = reason or "Workflow run cancelled"
+        run.metadata = {
+            **run.metadata,
+            "cancelled_by": cancelled_by,
+            "cancelled_at": now,
+            "cancel_reason": reason,
+        }
+        updated = await self.repository.update_workflow_run_status(
+            run,
+            expected_status=WorkflowRunStatus.RUNNING.value,
+        )
+        if not updated:
+            return await self.repository.get_workflow_run(run_id)
+        return run
+
+    async def is_run_cancelled(self, run_id: str) -> bool:
+        if not run_id:
+            return False
+        run = await self.repository.get_workflow_run(run_id)
+        return bool(run and run.status == WorkflowRunStatus.CANCELLED.value)
+
     async def record_node_success(
         self,
         *,

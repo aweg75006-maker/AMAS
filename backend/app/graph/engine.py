@@ -52,6 +52,10 @@ class WorkflowMaxStepsExceededError(WorkflowEngineExecutionError):
     error_code = "WORKFLOW_MAX_STEPS_EXCEEDED"
 
 
+class WorkflowRunCancelledError(WorkflowEngineExecutionError):
+    error_code = "WORKFLOW_RUN_CANCELLED"
+
+
 class PythonWorkflowEngine:
     """Primary workflow runner with explicit, testable Python control flow."""
 
@@ -89,6 +93,12 @@ class PythonWorkflowEngine:
                 step_index=steps,
                 current_node=next_node,
             )
+            await self._raise_if_run_cancelled(
+                state,
+                step_index=steps,
+                current_node=next_node,
+                started_at=started_at,
+            )
             steps += 1
             if steps > max_steps:
                 elapsed_ms = self._elapsed_ms(started_at)
@@ -111,6 +121,12 @@ class PythonWorkflowEngine:
 
             node_name = next_node
             node_update = await self._run_node(node_name, state)
+            await self._raise_if_run_cancelled(
+                state,
+                step_index=steps,
+                current_node=node_name,
+                started_at=started_at,
+            )
             self._raise_if_run_timed_out(
                 started_at,
                 timeout_seconds,
@@ -240,6 +256,40 @@ class PythonWorkflowEngine:
             elapsed_ms=elapsed_ms,
             details={
                 "timeout_seconds": timeout_seconds,
+                "elapsed_ms": elapsed_ms,
+                "step_index": step_index,
+                "current_node": current_node,
+            },
+        )
+
+    async def _raise_if_run_cancelled(
+        self,
+        state: AgentState,
+        *,
+        step_index: int,
+        current_node: str,
+        started_at: float,
+    ) -> None:
+        run_id = str(state.get("workflow_run_id") or "")
+        if not run_id:
+            return
+        from app.services.workflow_trace_service import get_workflow_trace_service
+
+        trace_service = await get_workflow_trace_service()
+        if not await trace_service.is_run_cancelled(run_id):
+            return
+        elapsed_ms = self._elapsed_ms(started_at)
+        raise WorkflowRunCancelledError(
+            (
+                "workflow run cancelled "
+                f"(run_id={run_id}, elapsed_ms={elapsed_ms}, "
+                f"step_index={step_index}, current_node={current_node})"
+            ),
+            current_node=current_node,
+            step_index=step_index,
+            elapsed_ms=elapsed_ms,
+            details={
+                "run_id": run_id,
                 "elapsed_ms": elapsed_ms,
                 "step_index": step_index,
                 "current_node": current_node,

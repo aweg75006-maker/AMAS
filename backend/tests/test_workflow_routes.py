@@ -8,7 +8,7 @@ from app.repositories.workflow_trace_repository import PostgresWorkflowTraceRepo
 from app.services.workflow_trace_service import WorkflowTraceService
 
 
-def _persist_workflow_run():
+def _persist_workflow_run(status=WorkflowRunStatus.SUCCEEDED.value):
     dsn = settings.secret_value(settings.postgres_dsn)
     assert dsn
 
@@ -63,7 +63,8 @@ def _persist_workflow_run():
                     "metadata": {"review_action": "rewrite"},
                 },
             )
-            await service.finish_run(run, status=WorkflowRunStatus.SUCCEEDED.value)
+            if status != WorkflowRunStatus.RUNNING.value:
+                await service.finish_run(run, status=status)
             await service.record_error_event(
                 error_code="ROUTE_TRACE_ERROR",
                 message="route error",
@@ -108,6 +109,8 @@ def test_owner_can_list_and_get_workflow_run(client):
     assert any(item["run_id"] == run_id for item in listed.json()["items"])
     assert detail.status_code == 200
     assert detail.json()["run"]["run_id"] == run_id
+    assert detail.json()["run"]["is_terminal"] is True
+    assert detail.json()["run"]["can_cancel"] is False
     assert detail.json()["nodes"][0]["node_name"] == "writer"
     assert detail.json()["tools"][0]["tool_name"] == "rag.retrieve"
     assert detail.json()["route_decisions"][0]["to_node"] == "writer"
@@ -115,6 +118,60 @@ def test_owner_can_list_and_get_workflow_run(client):
     assert any(item["error_code"] == "ROUTE_TRACE_ERROR" for item in errors.json()["items"])
     assert runtime.status_code == 200
     assert runtime.json()["runtime"]["workflow_version"]
+
+
+def test_owner_can_cancel_running_workflow_run(client):
+    run_id = _persist_workflow_run(status=WorkflowRunStatus.RUNNING.value)
+    token = create_access_token(
+        user_id="user_owner",
+        username="owner",
+        tenant_id="tenant_workflow_route",
+        role=TenantRole.OWNER.value,
+        expires_in=60,
+    )
+
+    response = client.post(
+        f"/api/workflow-runs/{run_id}/cancel",
+        json={"reason": "manual stop"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    detail = client.get(
+        f"/api/workflow-runs/{run_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    audits = client.get(
+        "/api/audit-logs",
+        params={"action": "workflow_run.cancelled"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["run"]["status"] == WorkflowRunStatus.CANCELLED.value
+    assert response.json()["run"]["error_code"] == "WORKFLOW_RUN_CANCELLED"
+    assert response.json()["run"]["is_terminal"] is True
+    assert response.json()["run"]["can_cancel"] is False
+    assert detail.json()["run"]["status"] == WorkflowRunStatus.CANCELLED.value
+    assert audits.status_code == 200
+    assert any(item["target_id"] == run_id for item in audits.json()["items"])
+
+
+def test_cannot_cancel_finished_workflow_run(client):
+    run_id = _persist_workflow_run(status=WorkflowRunStatus.SUCCEEDED.value)
+    token = create_access_token(
+        user_id="user_owner",
+        username="owner",
+        tenant_id="tenant_workflow_route",
+        role=TenantRole.OWNER.value,
+        expires_in=60,
+    )
+
+    response = client.post(
+        f"/api/workflow-runs/{run_id}/cancel",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "WORKFLOW_RUN_NOT_RUNNING"
 
 
 def test_viewer_cannot_list_workflow_runs(client):

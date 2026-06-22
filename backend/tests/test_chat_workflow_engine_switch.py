@@ -2,7 +2,7 @@ import pytest
 
 from app.api import routes_chat
 from app.core.identity import RequestContext
-from app.graph.engine import WorkflowRunTimeoutError
+from app.graph.engine import WorkflowRunCancelledError, WorkflowRunTimeoutError
 from app.models.domain import WorkflowRunStatus
 
 
@@ -121,3 +121,41 @@ async def test_record_workflow_failure_marks_run_failed_and_records_error():
     assert trace_service.finished_runs[0][1]["error_code"] == "WORKFLOW_RUN_TIMEOUT"
     assert trace_service.error_events[0]["error_code"] == "WORKFLOW_RUN_TIMEOUT"
     assert trace_service.error_events[0]["details"]["elapsed_ms"] == 301000
+
+
+@pytest.mark.asyncio
+async def test_record_workflow_failure_preserves_cancelled_run_status():
+    trace_service = FakeTraceService()
+    workflow_run = type("WorkflowRun", (), {"run_id": "run_1"})()
+    context = RequestContext(
+        tenant_id="tenant_1",
+        user_id="user_1",
+        username="tester",
+        role="owner",
+        auth_source="jwt",
+    )
+    exc = WorkflowRunCancelledError(
+        "workflow run cancelled",
+        current_node="planner",
+        step_index=1,
+        elapsed_ms=1000,
+        details={"run_id": "run_1"},
+    )
+    failure = routes_chat._workflow_failure_snapshot(exc)
+
+    run_finished = await routes_chat._record_workflow_failure(
+        trace_service=trace_service,
+        workflow_run=workflow_run,
+        context=context,
+        request_id="req_1",
+        session_id="session_1",
+        turn_id="turn_1",
+        path="/api/chat",
+        exc=exc,
+        failure=failure,
+        run_finished=False,
+    )
+
+    assert run_finished is False
+    assert trace_service.finished_runs == []
+    assert trace_service.error_events[0]["error_code"] == "WORKFLOW_RUN_CANCELLED"

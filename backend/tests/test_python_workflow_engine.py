@@ -4,6 +4,7 @@ from app.graph import engine as engine_module
 from app.graph.engine import (
     PythonWorkflowEngine,
     WorkflowMaxStepsExceededError,
+    WorkflowRunCancelledError,
     WorkflowRunTimeoutError,
 )
 
@@ -193,3 +194,39 @@ async def test_python_workflow_engine_raises_max_steps_exceeded(monkeypatch):
     assert exc.value.error_code == "WORKFLOW_MAX_STEPS_EXCEEDED"
     assert exc.value.current_node == "researcher"
     assert exc.value.details["max_steps"] == 1
+
+
+@pytest.mark.asyncio
+async def test_python_workflow_engine_raises_run_cancelled(monkeypatch):
+    _patch_nodes(monkeypatch)
+    engine = PythonWorkflowEngine()
+
+    class FakeTraceService:
+        async def is_run_cancelled(self, run_id):
+            return run_id == "run_cancelled"
+
+    async def get_fake_trace_service():
+        return FakeTraceService()
+
+    import app.services.workflow_trace_service as trace_service_module
+
+    monkeypatch.setattr(
+        trace_service_module,
+        "get_workflow_trace_service",
+        get_fake_trace_service,
+    )
+
+    with pytest.raises(WorkflowRunCancelledError) as exc:
+        await _collect_events(
+            engine,
+            {
+                "query": "hello",
+                "search_mode": "hybrid",
+                "revision_number": 0,
+                "workflow_run_id": "run_cancelled",
+            },
+        )
+
+    assert exc.value.error_code == "WORKFLOW_RUN_CANCELLED"
+    assert exc.value.current_node == "planner"
+    assert exc.value.details["run_id"] == "run_cancelled"

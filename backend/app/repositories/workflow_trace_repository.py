@@ -40,6 +40,14 @@ class WorkflowTraceRepository(Protocol):
     async def get_workflow_run(self, run_id: str) -> WorkflowRunRecord | None:
         ...
 
+    async def update_workflow_run_status(
+        self,
+        run: WorkflowRunRecord,
+        *,
+        expected_status: str | None = None,
+    ) -> bool:
+        ...
+
     async def list_node_runs(self, run_id: str) -> list[WorkflowNodeRunRecord]:
         ...
 
@@ -301,6 +309,57 @@ class PostgresWorkflowTraceRepository:
                 run_id,
             )
         return WorkflowRunRecord.from_dict(dict(row)) if row else None
+
+    async def update_workflow_run_status(
+        self,
+        run: WorkflowRunRecord,
+        *,
+        expected_status: str | None = None,
+    ) -> bool:
+        pool = await self._require_pool()
+        async with pool.acquire() as conn:
+            if expected_status is None:
+                result = await conn.execute(
+                    """
+                    UPDATE workflow_runs
+                    SET status = $2,
+                        finished_at = $3,
+                        duration_ms = $4,
+                        error_code = $5,
+                        error_message = $6,
+                        metadata = $7::jsonb
+                    WHERE run_id = $1
+                    """,
+                    run.run_id,
+                    run.status,
+                    run.finished_at,
+                    run.duration_ms,
+                    run.error_code,
+                    run.error_message,
+                    json.dumps(run.metadata, ensure_ascii=False),
+                )
+            else:
+                result = await conn.execute(
+                    """
+                    UPDATE workflow_runs
+                    SET status = $2,
+                        finished_at = $3,
+                        duration_ms = $4,
+                        error_code = $5,
+                        error_message = $6,
+                        metadata = $7::jsonb
+                    WHERE run_id = $1 AND status = $8
+                    """,
+                    run.run_id,
+                    run.status,
+                    run.finished_at,
+                    run.duration_ms,
+                    run.error_code,
+                    run.error_message,
+                    json.dumps(run.metadata, ensure_ascii=False),
+                    expected_status,
+                )
+        return result.endswith(" 1")
 
     async def list_node_runs(self, run_id: str) -> list[WorkflowNodeRunRecord]:
         pool = await self._require_pool()
