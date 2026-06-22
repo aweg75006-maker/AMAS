@@ -122,6 +122,17 @@ class PythonWorkflowEngine:
                     **node_update,
                     "_route_decisions": [pending_decision],
                 }
+            route_decisions = node_update.get("_route_decisions", [])
+            node_update = {
+                **node_update,
+                "_workflow_event": self._event_snapshot(
+                    node_name=node_name,
+                    step_index=steps,
+                    started_at=started_at,
+                    config=config,
+                    route_decisions=route_decisions,
+                ),
+            }
             state.update(node_update)
             yield {node_name: node_update}
             next_node, pending_decision = self._next_node(node_name, state)
@@ -253,6 +264,26 @@ class PythonWorkflowEngine:
                 "engine": "python",
                 **(metadata or {}),
             },
+        }
+
+    def _event_snapshot(
+        self,
+        *,
+        node_name: str,
+        step_index: int,
+        started_at: float,
+        config: dict | None,
+        route_decisions: list[dict],
+    ) -> dict[str, Any]:
+        configurable = (config or {}).get("configurable") or {}
+        return {
+            "engine": "python",
+            "node_name": node_name,
+            "step_index": step_index,
+            "run_elapsed_ms": self._elapsed_ms(started_at),
+            "route_decisions": route_decisions,
+            "thread_id": configurable.get("thread_id", ""),
+            "session_id": configurable.get("session_id", ""),
         }
 
 

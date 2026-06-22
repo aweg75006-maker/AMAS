@@ -10,7 +10,10 @@ from app.graph.engine import (
 
 async def _collect_events(engine, state):
     events = []
-    async for event in engine.astream(state, config={"configurable": {"thread_id": "t1"}}):
+    async for event in engine.astream(
+        state,
+        config={"configurable": {"thread_id": "t1", "session_id": "s1"}},
+    ):
         events.append(event)
     return events
 
@@ -61,6 +64,29 @@ async def test_python_workflow_engine_runs_happy_path(monkeypatch):
     assert events[0]["planner"]["_route_decisions"][0]["from_node"] == "__start__"
     assert events[1]["researcher"]["_route_decisions"][0]["from_node"] == "planner"
     assert events[-1]["reviewer"]["_route_decisions"][0]["to_node"] == "reviewer"
+
+
+@pytest.mark.asyncio
+async def test_python_workflow_engine_adds_event_envelope(monkeypatch):
+    _patch_nodes(monkeypatch)
+    engine = PythonWorkflowEngine()
+
+    events = await _collect_events(
+        engine,
+        {"query": "hello", "search_mode": "hybrid", "revision_number": 0},
+    )
+
+    envelopes = [
+        event[node_name]["_workflow_event"]
+        for event in events
+        for node_name in event
+    ]
+    assert [envelope["step_index"] for envelope in envelopes] == [1, 2, 3, 4]
+    assert envelopes[0]["engine"] == "python"
+    assert envelopes[0]["node_name"] == "planner"
+    assert envelopes[0]["thread_id"] == "t1"
+    assert envelopes[0]["session_id"] == "s1"
+    assert envelopes[0]["route_decisions"][0]["from_node"] == "__start__"
 
 
 @pytest.mark.asyncio

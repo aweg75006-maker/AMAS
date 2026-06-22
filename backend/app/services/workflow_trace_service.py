@@ -105,6 +105,7 @@ class WorkflowTraceService:
             token_usage=token_usage or {},
             metadata={
                 "state_keys": sorted(state_update.keys()),
+                "workflow_event": state_update.get("_workflow_event", {}),
                 "runtime": workflow_runtime_fingerprint(),
             },
         )

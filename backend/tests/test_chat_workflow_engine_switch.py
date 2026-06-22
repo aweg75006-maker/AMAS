@@ -22,3 +22,15 @@ async def test_chat_stream_uses_python_engine_when_configured(monkeypatch):
         events.append(event)
 
     assert events == [{"planner": {"plan": ["fake"]}}]
+
+
+def test_public_state_update_hides_workflow_event():
+    public = routes_chat._public_state_update(
+        {
+            "plan": ["fake"],
+            "_workflow_event": {"engine": "python"},
+            "_route_decisions": [{"from_node": "__start__"}],
+        }
+    )
+
+    assert public == {"plan": ["fake"]}
