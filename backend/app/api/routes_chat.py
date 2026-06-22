@@ -12,7 +12,7 @@ from app.api.schemas import ChatRequest
 from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
-from app.graph.engine import create_workflow_engine
+from app.graph.engine_factory import create_workflow_engine
 from app.graph.runtime import WorkflowNodeExecutionError
 from app.models.domain import WorkflowRunStatus
 from app.services.chat_history_service import persist_completed_chat_turn

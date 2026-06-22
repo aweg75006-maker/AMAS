@@ -5,12 +5,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any
 from uuid import uuid4
 
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
-from app.api.dependencies import CHECKPOINT_DB_PATH
-from app.core.config import settings
 from app.core.logging import get_logger
-from app.graph.graph import create_graph
 from app.graph.nodes.planner import plan_node
 from app.graph.nodes.refiner import refine_node
 from app.graph.nodes.researcher import research_node
@@ -24,9 +19,6 @@ from app.harness.registry import get_harness_manifest
 
 
 logger = get_logger("iris.graph.engine")
-
-
-NodeFn = Callable[[AgentState], dict]
 
 
 class PythonWorkflowEngine:
@@ -171,27 +163,3 @@ class PythonWorkflowEngine:
 
 def create_python_workflow_engine() -> PythonWorkflowEngine:
     return PythonWorkflowEngine()
-
-
-class LangGraphWorkflowEngineAdapter:
-    """Legacy LangGraph runner behind the same engine interface."""
-
-    async def astream(
-        self,
-        initial_state: AgentState,
-        config: dict | None = None,
-    ) -> AsyncIterator[dict[str, dict]]:
-        async with AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as memory_saver:
-            graph = create_graph(memory=memory_saver)
-            async for event in graph.astream(initial_state, config=config):
-                yield event
-
-
-def create_langgraph_workflow_engine() -> LangGraphWorkflowEngineAdapter:
-    return LangGraphWorkflowEngineAdapter()
-
-
-def create_workflow_engine():
-    if settings.workflow_engine == "langgraph":
-        return create_langgraph_workflow_engine()
-    return create_python_workflow_engine()
