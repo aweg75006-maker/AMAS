@@ -12,6 +12,7 @@ def workflow_runtime_fingerprint() -> dict[str, object]:
         "workflow_version": settings.workflow_version,
         "prompt_version": settings.prompt_version,
         "node_policy_version": settings.node_policy_version,
+        "workflow_engine": settings.workflow_engine,
         "harness": harness,
         "models": {
             "fast": settings.llm_fast_model,

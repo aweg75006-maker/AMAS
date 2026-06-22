@@ -10,9 +10,11 @@ from app.api.context import RequestContext, get_request_context
 from app.api.dependencies import CHECKPOINT_DB_PATH, get_assembler
 from app.api.rate_limits import chat_rate_limit
 from app.api.schemas import ChatRequest
+from app.core.config import settings
 from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
+from app.graph.engine import create_python_workflow_engine
 from app.graph.graph import create_graph
 from app.graph.runtime import WorkflowNodeExecutionError
 from app.models.domain import WorkflowRunStatus
@@ -116,56 +118,53 @@ async def chat_endpoint(
         )
 
         try:
-            async with AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as memory_saver:
-                app = create_graph(memory=memory_saver)
-
-                async for event in app.astream(initial_state, config=config):
-                    for node_name, state_update in event.items():
-                        node_started_at = time.time()
-                        final_state.update(state_update)
-                        _record_node_token_estimate(
-                            ledger, node_name, state_update
-                        )
-                        await trace_service.record_node_success(
+            async for event in _stream_workflow_events(initial_state, config):
+                for node_name, state_update in event.items():
+                    node_started_at = time.time()
+                    final_state.update(state_update)
+                    _record_node_token_estimate(
+                        ledger, node_name, state_update
+                    )
+                    await trace_service.record_node_success(
+                        run=workflow_run,
+                        node_name=node_name,
+                        state_update=state_update,
+                        started_at=node_started_at,
+                        token_usage=ledger.snapshot().__dict__,
+                    )
+                    for tool_snapshot in state_update.get("_tool_runs", []):
+                        tool_run = await trace_service.record_tool_run(
                             run=workflow_run,
                             node_name=node_name,
-                            state_update=state_update,
-                            started_at=node_started_at,
-                            token_usage=ledger.snapshot().__dict__,
+                            tool_snapshot=tool_snapshot,
                         )
-                        for tool_snapshot in state_update.get("_tool_runs", []):
-                            tool_run = await trace_service.record_tool_run(
-                                run=workflow_run,
+                        if tool_run.status == "failed":
+                            await trace_service.record_error_event(
+                                error_code=tool_run.error_code or "TOOL_FAILED",
+                                message=f"工具调用失败：{tool_run.tool_name}",
+                                source="tool",
+                                context=context,
+                                request_id=request_id,
+                                session_id=session_id,
+                                turn_id=turn_id,
+                                run_id=workflow_run.run_id,
                                 node_name=node_name,
-                                tool_snapshot=tool_snapshot,
+                                path=str(http_request.url.path),
+                                status_code=500,
+                                details={
+                                    "tool_run_id": tool_run.tool_run_id,
+                                    "tool_name": tool_run.tool_name,
+                                    "reason": tool_run.error_message,
+                                },
                             )
-                            if tool_run.status == "failed":
-                                await trace_service.record_error_event(
-                                    error_code=tool_run.error_code or "TOOL_FAILED",
-                                    message=f"工具调用失败：{tool_run.tool_name}",
-                                    source="tool",
-                                    context=context,
-                                    request_id=request_id,
-                                    session_id=session_id,
-                                    turn_id=turn_id,
-                                    run_id=workflow_run.run_id,
-                                    node_name=node_name,
-                                    path=str(http_request.url.path),
-                                    status_code=500,
-                                    details={
-                                        "tool_run_id": tool_run.tool_run_id,
-                                        "tool_name": tool_run.tool_name,
-                                        "reason": tool_run.error_message,
-                                    },
-                                )
 
-                        public_state_update = _public_state_update(state_update)
-                        data = json.dumps(
-                            {"step": node_name, "data": public_state_update},
-                            ensure_ascii=False,
-                        )
-                        yield f"data: {data}\n\n"
-                        await asyncio.sleep(0.1)
+                    public_state_update = _public_state_update(state_update)
+                    data = json.dumps(
+                        {"step": node_name, "data": public_state_update},
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {data}\n\n"
+                    await asyncio.sleep(0.1)
 
             full_state = {**initial_state, **final_state}
             turn_record = await assembler.finalize(full_state, ledger)
@@ -266,6 +265,19 @@ async def chat_endpoint(
         event_generator(),
         media_type="text/event-stream",
     )
+
+
+async def _stream_workflow_events(initial_state: dict, config: dict):
+    if settings.workflow_engine == "python":
+        engine = create_python_workflow_engine()
+        async for event in engine.astream(initial_state, config=config):
+            yield event
+        return
+
+    async with AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as memory_saver:
+        app = create_graph(memory=memory_saver)
+        async for event in app.astream(initial_state, config=config):
+            yield event
 
 
 def _record_node_token_estimate(

@@ -1,0 +1,121 @@
+import pytest
+
+from app.graph import engine as engine_module
+from app.graph.engine import PythonWorkflowEngine
+
+
+async def _collect_events(engine, state):
+    events = []
+    async for event in engine.astream(state, config={"configurable": {"thread_id": "t1"}}):
+        events.append(event)
+    return events
+
+
+def _patch_nodes(monkeypatch, *, review_action="none", review_status="PASS"):
+    monkeypatch.setattr(engine_module, "route_query", lambda state: "planner")
+    monkeypatch.setattr(engine_module, "plan_node", lambda state: {"plan": ["topic"]})
+    monkeypatch.setattr(
+        engine_module,
+        "research_node",
+        lambda state: {"search_results": ["evidence"]},
+    )
+    monkeypatch.setattr(
+        engine_module,
+        "write_node",
+        lambda state: {
+            "final_report": f"report:{state.get('revision_number', 0)}",
+        },
+    )
+    monkeypatch.setattr(
+        engine_module,
+        "review_node",
+        lambda state: {
+            "review_status": review_status,
+            "review_action": review_action,
+            "revision_number": state.get("revision_number", 0) + 1,
+            "critique": "" if review_status == "PASS" else "please improve",
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_python_workflow_engine_runs_happy_path(monkeypatch):
+    _patch_nodes(monkeypatch)
+    engine = PythonWorkflowEngine()
+
+    events = await _collect_events(
+        engine,
+        {"query": "hello", "search_mode": "hybrid", "revision_number": 0},
+    )
+
+    assert [list(event)[0] for event in events] == [
+        "planner",
+        "researcher",
+        "writer",
+        "reviewer",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_python_workflow_engine_routes_rewrite_to_writer(monkeypatch):
+    calls = {"review": 0}
+    monkeypatch.setattr(engine_module, "route_query", lambda state: "planner")
+    monkeypatch.setattr(engine_module, "plan_node", lambda state: {"plan": ["topic"]})
+    monkeypatch.setattr(
+        engine_module,
+        "research_node",
+        lambda state: {"search_results": ["evidence"]},
+    )
+    monkeypatch.setattr(engine_module, "write_node", lambda state: {"final_report": "report"})
+
+    def review_node(state):
+        calls["review"] += 1
+        if calls["review"] == 1:
+            return {
+                "review_status": "FAIL",
+                "review_action": "rewrite",
+                "revision_number": 1,
+                "critique": "rewrite structure",
+            }
+        return {
+            "review_status": "PASS",
+            "review_action": "none",
+            "revision_number": 2,
+            "critique": "",
+        }
+
+    monkeypatch.setattr(engine_module, "review_node", review_node)
+    engine = PythonWorkflowEngine()
+
+    events = await _collect_events(
+        engine,
+        {"query": "hello", "search_mode": "hybrid", "revision_number": 0},
+    )
+
+    assert [list(event)[0] for event in events] == [
+        "planner",
+        "researcher",
+        "writer",
+        "reviewer",
+        "writer",
+        "reviewer",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_python_workflow_engine_refine_path(monkeypatch):
+    monkeypatch.setattr(engine_module, "route_query", lambda state: "refiner")
+    monkeypatch.setattr(
+        engine_module,
+        "refine_node",
+        lambda state: {"final_report": "refined", "review_status": "PASS"},
+    )
+    engine = PythonWorkflowEngine()
+
+    events = await _collect_events(
+        engine,
+        {"query": "改详细一点", "final_report": "old"},
+    )
+
+    assert [list(event)[0] for event in events] == ["refiner"]
+    assert events[0]["refiner"]["final_report"] == "refined"

@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     prompt_version: str = "prompt.v1"
     node_policy_version: str = "node-policy.v1"
     harness_manifest: str = "default_research.json"
+    workflow_engine: Literal["langgraph", "python"] = "langgraph"
 
     total_token_budget: int = 128_000
 
@@ -153,6 +154,7 @@ class Settings(BaseSettings):
             "prompt_version": self.prompt_version,
             "node_policy_version": self.node_policy_version,
             "harness_manifest": self.harness_manifest,
+            "workflow_engine": self.workflow_engine,
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),
