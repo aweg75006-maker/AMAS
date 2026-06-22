@@ -1,7 +1,11 @@
 import pytest
 
 from app.graph import engine as engine_module
-from app.graph.engine import PythonWorkflowEngine
+from app.graph.engine import (
+    PythonWorkflowEngine,
+    WorkflowMaxStepsExceededError,
+    WorkflowRunTimeoutError,
+)
 
 
 async def _collect_events(engine, state):
@@ -126,3 +130,40 @@ async def test_python_workflow_engine_refine_path(monkeypatch):
     assert [list(event)[0] for event in events] == ["refiner"]
     assert events[0]["refiner"]["final_report"] == "refined"
     assert events[0]["refiner"]["_route_decisions"][0]["to_node"] == "refiner"
+
+
+@pytest.mark.asyncio
+async def test_python_workflow_engine_raises_run_timeout(monkeypatch):
+    from app.core.config import settings
+
+    _patch_nodes(monkeypatch)
+    monkeypatch.setattr(settings, "workflow_run_timeout_seconds", 0.001)
+    engine = PythonWorkflowEngine()
+    monkeypatch.setattr(engine, "_elapsed_ms", lambda started_at: 10)
+
+    with pytest.raises(WorkflowRunTimeoutError) as exc:
+        await _collect_events(
+            engine,
+            {"query": "hello", "search_mode": "hybrid", "revision_number": 0},
+        )
+
+    assert exc.value.error_code == "WORKFLOW_RUN_TIMEOUT"
+    assert exc.value.current_node == "planner"
+    assert exc.value.details["timeout_seconds"] == 0.001
+
+
+@pytest.mark.asyncio
+async def test_python_workflow_engine_raises_max_steps_exceeded(monkeypatch):
+    _patch_nodes(monkeypatch, review_action="rewrite", review_status="FAIL")
+    engine = PythonWorkflowEngine()
+    monkeypatch.setattr(engine, "_max_steps", lambda: 1)
+
+    with pytest.raises(WorkflowMaxStepsExceededError) as exc:
+        await _collect_events(
+            engine,
+            {"query": "hello", "search_mode": "hybrid", "revision_number": 0},
+        )
+
+    assert exc.value.error_code == "WORKFLOW_MAX_STEPS_EXCEEDED"
+    assert exc.value.current_node == "researcher"
+    assert exc.value.details["max_steps"] == 1

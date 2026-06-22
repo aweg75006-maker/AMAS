@@ -18,6 +18,7 @@ def test_workflow_runtime_fingerprint_contains_versions_and_policy():
     assert runtime["loop_policy"]["review_rewrite_next"] == "writer"
     assert runtime["models"]["fast"]
     assert runtime["node_execution"]["timeout_seconds"] > 0
+    assert runtime["run_execution"]["timeout_seconds"] == 300
 
 
 def test_workflow_runtime_diagnostics_contains_rollout_status_and_tools():

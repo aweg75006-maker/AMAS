@@ -24,6 +24,9 @@ def workflow_runtime_fingerprint() -> dict[str, object]:
             "max_retries": settings.workflow_node_max_retries,
             "retry_backoff_seconds": settings.workflow_retry_backoff_seconds,
         },
+        "run_execution": {
+            "timeout_seconds": settings.workflow_run_timeout_seconds,
+        },
         "loop_policy": {
             "max_revisions": harness["max_revisions"],
             "review_fail_next": "planner",

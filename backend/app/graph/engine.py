@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any
 from uuid import uuid4
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.graph.nodes.planner import plan_node
 from app.graph.nodes.refiner import refine_node
@@ -19,6 +20,36 @@ from app.harness.registry import get_harness_manifest
 
 
 logger = get_logger("iris.graph.engine")
+
+
+class WorkflowEngineExecutionError(Exception):
+    """Raised when the workflow engine cannot safely continue a run."""
+
+    error_code = "WORKFLOW_ENGINE_FAILED"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        current_node: str = "",
+        step_index: int = 0,
+        elapsed_ms: int = 0,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.current_node = current_node
+        self.node_name = current_node
+        self.step_index = step_index
+        self.elapsed_ms = elapsed_ms
+        self.details = details or {}
+
+
+class WorkflowRunTimeoutError(WorkflowEngineExecutionError):
+    error_code = "WORKFLOW_RUN_TIMEOUT"
+
+
+class WorkflowMaxStepsExceededError(WorkflowEngineExecutionError):
+    error_code = "WORKFLOW_MAX_STEPS_EXCEEDED"
 
 
 class PythonWorkflowEngine:
@@ -46,16 +77,46 @@ class PythonWorkflowEngine:
         state: AgentState = dict(initial_state)
         next_node, entry_decision = self._route_entry(state)
         max_steps = self._max_steps()
+        timeout_seconds = self._run_timeout_seconds()
+        started_at = time.monotonic()
         steps = 0
         pending_decision = entry_decision
 
         while next_node != self.END:
+            self._raise_if_run_timed_out(
+                started_at,
+                timeout_seconds,
+                step_index=steps,
+                current_node=next_node,
+            )
             steps += 1
             if steps > max_steps:
-                raise RuntimeError(f"workflow exceeded max steps: {max_steps}")
+                elapsed_ms = self._elapsed_ms(started_at)
+                raise WorkflowMaxStepsExceededError(
+                    (
+                        "workflow exceeded max steps "
+                        f"(max_steps={max_steps}, elapsed_ms={elapsed_ms}, "
+                        f"step_index={steps}, current_node={next_node})"
+                    ),
+                    current_node=next_node,
+                    step_index=steps,
+                    elapsed_ms=elapsed_ms,
+                    details={
+                        "max_steps": max_steps,
+                        "elapsed_ms": elapsed_ms,
+                        "step_index": steps,
+                        "current_node": next_node,
+                    },
+                )
 
             node_name = next_node
             node_update = await self._run_node(node_name, state)
+            self._raise_if_run_timed_out(
+                started_at,
+                timeout_seconds,
+                step_index=steps,
+                current_node=node_name,
+            )
             if pending_decision is not None:
                 node_update = {
                     **node_update,
@@ -139,6 +200,40 @@ class PythonWorkflowEngine:
         # Initial pass is planner/researcher/writer/reviewer. Each failed review can
         # add a replan path or a rewrite path. Keep a small buffer for refine flow.
         return 4 + get_harness_manifest().max_revisions * 4 + 2
+
+    def _run_timeout_seconds(self) -> float:
+        return max(0.001, settings.workflow_run_timeout_seconds)
+
+    def _elapsed_ms(self, started_at: float) -> int:
+        return int((time.monotonic() - started_at) * 1000)
+
+    def _raise_if_run_timed_out(
+        self,
+        started_at: float,
+        timeout_seconds: float,
+        *,
+        step_index: int,
+        current_node: str,
+    ) -> None:
+        elapsed_ms = self._elapsed_ms(started_at)
+        if elapsed_ms <= int(timeout_seconds * 1000):
+            return
+        raise WorkflowRunTimeoutError(
+            (
+                "workflow run timed out "
+                f"(timeout_seconds={timeout_seconds}, elapsed_ms={elapsed_ms}, "
+                f"step_index={step_index}, current_node={current_node})"
+            ),
+            current_node=current_node,
+            step_index=step_index,
+            elapsed_ms=elapsed_ms,
+            details={
+                "timeout_seconds": timeout_seconds,
+                "elapsed_ms": elapsed_ms,
+                "step_index": step_index,
+                "current_node": current_node,
+            },
+        )
 
     def _decision_snapshot(
         self,
