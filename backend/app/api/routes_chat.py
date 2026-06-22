@@ -4,18 +4,15 @@ import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from app.api.context import RequestContext, get_request_context
-from app.api.dependencies import CHECKPOINT_DB_PATH, get_assembler
+from app.api.dependencies import get_assembler
 from app.api.rate_limits import chat_rate_limit
 from app.api.schemas import ChatRequest
-from app.core.config import settings
 from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
-from app.graph.engine import create_python_workflow_engine
-from app.graph.graph import create_graph
+from app.graph.engine import create_workflow_engine
 from app.graph.runtime import WorkflowNodeExecutionError
 from app.models.domain import WorkflowRunStatus
 from app.services.chat_history_service import persist_completed_chat_turn
@@ -273,16 +270,9 @@ async def chat_endpoint(
 
 
 async def _stream_workflow_events(initial_state: dict, config: dict):
-    if settings.workflow_engine == "python":
-        engine = create_python_workflow_engine()
-        async for event in engine.astream(initial_state, config=config):
-            yield event
-        return
-
-    async with AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as memory_saver:
-        app = create_graph(memory=memory_saver)
-        async for event in app.astream(initial_state, config=config):
-            yield event
+    engine = create_workflow_engine()
+    async for event in engine.astream(initial_state, config=config):
+        yield event
 
 
 def _record_node_token_estimate(
