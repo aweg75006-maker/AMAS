@@ -10,7 +10,7 @@ Phase 3 更新：
     assembler = ContextAssembler()
     state, ledger, memory = await assembler.prepare(query, search_mode, session_id)
 
-    # 运行 LangGraph...
+    # 运行 workflow engine...
     await assembler.finalize(state, ledger)
 """
 
@@ -242,7 +242,7 @@ class ContextAssembler:
         Phase 3: 触发异步压缩调度（fire-and-forget）。
 
         Args:
-            final_state: LangGraph 执行完成后的 AgentState
+            final_state: workflow engine 执行完成后的 AgentState
             ledger: 预算账簿
 
         Returns:

@@ -16,7 +16,7 @@
 
 ## ✨ 核心特性
 
-* 🧠 **Agentic 工作流引擎** — 基于 LangGraph 的图结构状态机，支持条件分支与循环流转。内置 Router、Planner、Researcher、Writer、Reviewer、Refiner 六个异构节点协同工作。
+* 🧠 **Agentic 工作流引擎** — 默认采用纯 Python Workflow Engine 显式调度状态流、条件分支与循环流转，并保留 LangGraph legacy fallback 作为可回滚适配层。内置 Router、Planner、Researcher、Writer、Reviewer、Refiner 六个异构节点协同工作。
 
 * 🛡️ **防幻觉与动态路由** — 本地文档检索后由裁判节点实时评估相关性。无关文档自动触发**熔断机制**（纯文档模式终止并警告）或**智能降级**（混合模式自动切换全网搜索）。
 
@@ -52,7 +52,7 @@ Task Planner → Deep Researcher → Relevance Grader
 | 层级 | 技术 |
 |------|------|
 | **API 框架** | Python 3.10+, FastAPI, Uvicorn |
-| **Agent 架构** | LangChain, LangGraph, LangGraph Checkpoint |
+| **Agent 架构** | Python Workflow Engine, Harness Registry, Tool Runtime, LangGraph Legacy Fallback |
 | **向量检索** | ChromaDB, HuggingFace Embeddings |
 | **核心 LLM** | 阿里云百炼 DashScope (Qwen-Max, DeepSeek-R1) |
 | **网络搜索** | Tavily Search API |
@@ -94,7 +94,7 @@ AMAS/
 ├── backend/
 │   ├── app/
 │   │   ├── api/          # FastAPI 路由与 SSE 流式分发
-│   │   ├── graph/        # LangGraph 核心逻辑（节点、状态机、拓扑）
+│   │   ├── graph/        # Python Workflow Engine、节点、状态策略与 legacy LangGraph adapter
 │   │   ├── rag/          # 文档解析、向量化与检索引擎
 │   │   └── tools/        # Tavily 搜索工具
 │   ├── main.py
@@ -112,4 +112,4 @@ AMAS/
 
 ## 💡 研发心得
 
-构建 AMAS 的过程中，最大的挑战在于**打破传统大模型黑盒调用的不可控性**。通过 LangGraph 状态机，系统获得了在执行过程中"反思"与"动态纠错"的能力；通过 SSE 流式传输实现了 Agent 内部状态的可视化。该项目是对 Agentic System 底层运行机制、异步并发控制与前后端流式交互的一次深度工程实践。
+构建 AMAS 的过程中，最大的挑战在于**打破传统大模型黑盒调用的不可控性**。通过纯 Python Workflow Engine，系统把路由决策、节点执行、工具调用、失败重试与 trace 暴露为可测试、可审计的业务代码；LangGraph 保留为 legacy fallback，便于灰度回滚与行为对照。配合 SSE 流式传输，前端可以低延迟观察 Agent 内部状态流转。该项目是对 Agentic System 底层运行机制、异步并发控制与前后端流式交互的一次深度工程实践。

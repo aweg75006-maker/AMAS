@@ -57,7 +57,9 @@ def workflow_runtime_diagnostics() -> dict[str, object]:
         **runtime,
         "diagnostics": {
             "active_engine": settings.workflow_engine,
-            "available_engines": ["langgraph", "python"],
+            "primary_engine": "python",
+            "legacy_fallback_engine": "langgraph",
+            "available_engines": ["python", "langgraph"],
             "route_decision_trace_enabled": settings.workflow_engine == "python",
             "tool_trace_enabled": True,
             "node_trace_enabled": True,

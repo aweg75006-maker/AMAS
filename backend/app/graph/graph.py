@@ -1,3 +1,5 @@
+"""Legacy LangGraph topology retained for rollback and parity checks."""
+
 from langgraph.graph import StateGraph, END
 from app.core.logging import get_logger
 from app.graph.policies.workflow_loop_policy import WorkflowLoopPolicy

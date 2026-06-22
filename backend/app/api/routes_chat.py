@@ -35,7 +35,7 @@ async def chat_endpoint(
     """
     Multi-turn research chat endpoint.
 
-    The endpoint streams LangGraph node updates with SSE.
+    The endpoint streams workflow node updates with SSE.
     """
     kb_service = await get_knowledge_base_service()
     knowledge_base_id = (

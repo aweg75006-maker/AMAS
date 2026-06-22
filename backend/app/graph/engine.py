@@ -22,7 +22,7 @@ logger = get_logger("iris.graph.engine")
 
 
 class PythonWorkflowEngine:
-    """Pure Python workflow runner compatible with LangGraph's event shape."""
+    """Primary workflow runner with explicit, testable Python control flow."""
 
     END = "__end__"
 

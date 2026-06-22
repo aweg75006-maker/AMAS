@@ -402,12 +402,12 @@ class RedisClient:
     # ─── 高层 API：Checkpoint ───
 
     async def save_checkpoint(self, thread_id: str, namespace: str, data: str) -> None:
-        """保存 LangGraph checkpoint。"""
+        """保存 workflow checkpoint。"""
         key = f"checkpoint:{thread_id}:{namespace}"
         await self.set(key, data, ex=CHECKPOINT_TTL)
 
     async def get_checkpoint(self, thread_id: str, namespace: str) -> Optional[str]:
-        """读取 LangGraph checkpoint。"""
+        """读取 workflow checkpoint。"""
         return await self.get(f"checkpoint:{thread_id}:{namespace}")
 
 

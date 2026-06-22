@@ -9,7 +9,7 @@
 AMAS 当前已经具备一个清晰的 Agentic Workflow 骨架：
 
 - 后端使用 FastAPI 提供 API 与 SSE 流式输出。
-- Agent 编排基于 LangGraph，采用中心状态机统一调度。
+- Agent 编排默认基于纯 Python Workflow Engine，采用中心状态机统一调度；LangGraph 已降级为 legacy fallback，用于灰度回滚和行为对照。
 - 主流程为 Router、Planner、Researcher、Writer、Reviewer、Refiner。
 - 已支持本地文档 RAG、网络搜索、报告生成、审查回环、报告局部修改。
 - 已加入会话级记忆、滑动窗口、语义记忆、Token 预算管理等上下文工程能力。
@@ -32,7 +32,7 @@ AMAS 当前已经具备一个清晰的 Agentic Workflow 骨架：
 
 | 模块 | 当前状态 | 企业级缺口 | 优先级 |
 |---|---|---|---|
-| Agent 编排 | 已有 LangGraph 状态机 | 缺少工作流版本、节点超时、失败重试、执行追踪 | P0 |
+| Agent 编排 | 已有 Python Workflow Engine、Harness Registry、Tool Runtime，保留 LangGraph legacy fallback | 需要继续强化工作流版本治理、灰度回滚策略、执行追踪分析和回归评测 | P0 |
 | RAG | 已有本地文档检索和相关性判断 | 缺少多知识库、权限隔离、文档增量索引、引用溯源 | P0 |
 | 会话记忆 | 已有 Redis 会话、分层记忆、压缩摘要 | 缺少长期持久化、租户隔离、记忆治理策略 | P0 |
 | API | 已有 chat、upload、session 等接口 | 缺少统一错误码、鉴权、限流、API 版本化 | P0 |
@@ -759,7 +759,7 @@ Lint
 
 ### 17.2 Agent 架构
 
-保留当前 Supervisor-style LangGraph 架构，但增加：
+保留当前 Supervisor-style 中心调度范式，但主引擎以纯 Python Workflow Engine 承载，LangGraph 只作为 legacy fallback。继续增加：
 
 - Workflow Registry。
 - Prompt Registry。

@@ -24,6 +24,9 @@ def test_workflow_runtime_diagnostics_contains_rollout_status_and_tools():
     diagnostics = workflow_runtime_diagnostics()
 
     assert diagnostics["diagnostics"]["active_engine"] in {"langgraph", "python"}
+    assert diagnostics["diagnostics"]["primary_engine"] == "python"
+    assert diagnostics["diagnostics"]["legacy_fallback_engine"] == "langgraph"
+    assert diagnostics["diagnostics"]["available_engines"] == ["python", "langgraph"]
     assert diagnostics["diagnostics"]["rollback_engine"] == "langgraph"
     assert diagnostics["diagnostics"]["tool_trace_enabled"] is True
     assert diagnostics["diagnostics"]["node_trace_enabled"] is True

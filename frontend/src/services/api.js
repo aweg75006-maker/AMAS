@@ -34,7 +34,7 @@ function generateUUID() {
   });
 }
 
-// 本地 thread_id：LangGraph 粒度，每次页面刷新重置
+// 本地 thread_id：workflow run 粒度，每次页面刷新重置
 const SESSION_THREAD_ID = generateUUID();
 
 // ─── 服务端会话管理（Phase 1 新增）───
