@@ -95,20 +95,23 @@ async def run_research_and_notify(
     final_state: dict[str, Any] = {}
     status = "succeeded"
     error: Optional[str] = None
-    started_at = time.monotonic()
 
     # 4. 运行工作流引擎（无 SSE，收集最终状态）。
+    # 注意：record_node_success 内部用 time.time() 计算 finished_at 与 duration_ms，
+    # 因此传入的 started_at 必须是 epoch 秒（time.time()），不能用 time.monotonic()，
+    # 否则两者 epoch 不同会得到约 1.78e12ms 的伪 duration，写入 Postgres 时溢出 INTEGER。
     try:
         engine = create_workflow_engine()
         async for event in engine.astream(initial_state, config=config):
             for node_name, state_update in event.items():
+                node_started_at = time.time()
                 final_state.update(state_update)
                 _record_node_token_estimate(ledger, node_name, state_update)
                 await trace_service.record_node_success(
                     run=run,
                     node_name=node_name,
                     state_update=state_update,
-                    started_at=started_at,
+                    started_at=node_started_at,
                     token_usage=ledger.snapshot().__dict__,
                 )
 
