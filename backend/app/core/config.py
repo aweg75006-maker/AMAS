@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     cron_poll_interval_seconds: float = 30.0
     # 通过环境变量 CRON_JOBS 注入 JSON 数组，作为启动时预置的定时任务。
     cron_jobs: list[dict[str, Any]] = []
+    # ─── 第三方 Agent Connector (P5) ───
+    # 通过环境变量 CONNECTORS 注入 JSON 数组，注册第三方 Agent connector 端点，
+    # 例如：[{"name":"my_agent","type":"http_agent","config":{"base_url":"https://...",
+    # "api_key":"...","model":"gpt-4o-mini"}}, ...]
+    connectors: list[dict[str, Any]] = []
 
     total_token_budget: int = 128_000
 
@@ -169,6 +174,7 @@ class Settings(BaseSettings):
             "webhook_trigger_configured": bool(self.webhook_trigger_token),
             "cron_enabled": self.cron_enabled,
             "cron_poll_interval_seconds": self.cron_poll_interval_seconds,
+            "connectors_configured": bool(self.connectors),
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),

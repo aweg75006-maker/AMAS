@@ -73,6 +73,29 @@
 - **飞书通知**：`app/integrations/feishu.py` 的 `FeishuNotifier` 向自定义机器人 webhook 推送文本/消息卡片，best-effort（失败仅记日志，不阻断主流程）；webhook 通过 `FEISHU_WEBHOOK_URL` 配置。
 - **配置项**（backend/.env）：`FEISHU_WEBHOOK_URL`、`WEBHOOK_TRIGGER_TOKEN`、`CRON_ENABLED`、`CRON_POLL_INTERVAL_SECONDS`、`CRON_JOBS`（可选，启动预置任务 JSON 数组）。
 
+### 🧩 第三方 Agent Connector 框架（P5）
+
+把「第三方智能体 / 服务端点」抽象为可插拔的 Connector，让 IRIS 能像调用工具一样
+把子问题**委派给外部 Agent**（agent-to-agent 编排），或把子任务交给本系统内部的子 Agent。
+设计沿用已有的 `ToolRegistry` 模式，但 Connector 面向更高层的「智能体能力」。
+
+- **统一抽象**：`app/connectors/base.py` 的 `BaseConnector`（协程 `invoke` + 同步 `run` 桥接）。
+  `connector.run(prompt, context=..., system_prompt=...)` → 返回结构化 `ConnectorResult`（含 success / error / meta），
+  失败统一降级为可读错误文本，不中断主流程。
+- **注册中心**：`app/connectors/registry.py` 的 `ConnectorRegistry` + 进程级单例 `get_connector_registry()`。
+- **内置实现**：
+  - `internal_subagent`（默认可用）：用 IRIS 自身 LLM（`get_llm`）充当子 Agent 处理子问题。
+  - `HttpAgentConnector`：调用外部 Agent 端点，支持 `openai_compatible`（`{base_url}/chat/completions`）与 `generic_json` 两种协议，基于 `httpx`，best-effort。
+- **配置驱动注册**：在 backend/.env 配置 `CONNECTORS`（JSON 数组）即可注册外部端点，无需改代码：
+  ```json
+  CONNECTORS=[{"name":"my_agent","type":"http_agent","config":{"base_url":"https://agent.example.com","api_key":"sk-xxx","model":"gpt-4o-mini"}}]
+  ```
+  支持类型：`http_agent` / `openai_compatible`（别名）/ `internal_subagent`。
+- **接入研究工作流**：已注册为研究工具 `delegate_to_connector`（挂在 `researcher` 节点），
+  Researcher 可在研究中把子问题委派给任意已注册 Connector 并回收结果：
+  - 工具入参：`{ "connector": "internal_subagent", "prompt": "...", "system_prompt": "..." }`
+- **测试**：`tests/test_connectors.py`（注册中心 / 配置路由 / HTTP Connector / 内部子 Agent / 工具桥接与降级，13 用例全绿）。
+
 ---
 
 <a id="preview"></a>
