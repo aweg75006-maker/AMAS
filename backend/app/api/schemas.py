@@ -10,6 +10,18 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     knowledge_base_id: Optional[str] = None
     pinned_turn_ids: Optional[List[str]] = None
+    # HITL：在执行该节点之前暂停，等待人工确认/补充指令（如 "reviewer"）。
+    hitl_pause_before: Optional[str] = None
+
+
+class ResumeChatRequest(BaseModel):
+    """断点续跑 / 人工介入续跑请求。"""
+
+    thread_id: str
+    # 续跑时追加的补充说明（追加到 query）。
+    resume_instruction: Optional[str] = None
+    # HITL 人工输入：注入到断点状态，供续跑节点消费（如人工修订意见）。
+    human_input: Optional[str] = None
 
 
 class SessionResponse(BaseModel):

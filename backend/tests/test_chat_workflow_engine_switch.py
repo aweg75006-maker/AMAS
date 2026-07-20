@@ -7,7 +7,7 @@ from app.models.domain import WorkflowRunStatus
 
 
 class FakeWorkflowEngine:
-    async def astream(self, initial_state, config=None):
+    async def astream(self, initial_state, config=None, *, resume_thread_id=None):
         yield {"planner": {"plan": ["fake"]}}
 
 

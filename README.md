@@ -49,6 +49,14 @@
 - **企业基础能力**：集成 JWT 认证、RBAC 权限、审计日志、限流与多租户数据边界。
 - **实时反馈**：FastAPI + SSE 持续推送节点状态与报告内容，前端即时呈现执行进度。
 
+### 🔁 运行韧性与人工介入（Checkpoint / HITL）
+
+- **断点续跑（Checkpoint / Resume）**：每个节点执行前在 Redis 落盘完整状态与下一执行节点；运行被取消、崩溃或超时后，可依据 `thread_id` 从最近断点恢复，**无需重跑已完成节点**。
+- **人机交互（HITL）**：支持在指定节点前主动暂停（如 `reviewer` 前等待人工确认/修订报告草稿），运行标记为 `PAUSED` 并下发暂停信号；人工输入通过 `/chat/resume` 的 `human_input` 注入断点状态后续跑。
+- **恢复接口**：
+  - `POST /chat/resume`：`{ "thread_id", "resume_instruction?", "human_input?" }` —— 从断点恢复，可追加补充指令或人工输入。
+  - `POST /chat` 支持 `hitl_pause_before` 字段，声明需要在哪个节点前暂停等待人工介入。
+
 ---
 
 <a id="preview"></a>

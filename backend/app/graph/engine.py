@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any
@@ -56,6 +57,23 @@ class WorkflowRunCancelledError(WorkflowEngineExecutionError):
     error_code = "WORKFLOW_RUN_CANCELLED"
 
 
+class WorkflowResumeError(WorkflowEngineExecutionError):
+    """Raised when a run cannot be resumed (e.g. no checkpoint available)."""
+
+    error_code = "WORKFLOW_RESUME_FAILED"
+
+
+class WorkflowPausedError(WorkflowEngineExecutionError):
+    """Raised when the workflow intentionally pauses for human-in-the-loop input.
+
+    The caller should mark the run as PAUSED and wait for human input, then
+    resume from the saved checkpoint (see :class:`PythonWorkflowEngine.astream`
+    ``resume_thread_id``).
+    """
+
+    error_code = "WORKFLOW_PAUSED"
+
+
 class PythonWorkflowEngine:
     """Primary workflow runner with explicit, testable Python control flow."""
 
@@ -77,14 +95,48 @@ class PythonWorkflowEngine:
         self,
         initial_state: AgentState,
         config: dict | None = None,
+        *,
+        resume_thread_id: str | None = None,
     ) -> AsyncIterator[dict[str, dict]]:
         state: AgentState = dict(initial_state)
-        next_node, entry_decision = self._route_entry(state)
+        thread_id = (config or {}).get("configurable", {}).get("thread_id", "")
+
+        if resume_thread_id:
+            # 断点续跑：从最近一次 checkpoint 恢复执行位置与状态。
+            checkpoint = await self._load_checkpoint(resume_thread_id)
+            if checkpoint is None:
+                raise WorkflowResumeError(
+                    "no checkpoint available to resume",
+                    current_node="__start__",
+                    details={"thread_id": resume_thread_id},
+                )
+            restored = dict(checkpoint.get("state", {}))
+            # 续跑会开启一个新的 workflow_run：调用方注入的运行标识
+            # （run_id/request_id/user 等）应优先于旧 checkpoint，避免追踪错乱。
+            for key in ("workflow_run_id", "request_id", "user_id", "username"):
+                if key in initial_state:
+                    restored[key] = initial_state[key]
+            state = restored
+            next_node = checkpoint["next_node"]
+            pending_decision = checkpoint.get("pending_decision")
+            steps = int(checkpoint.get("steps", 0))
+            logger.info(
+                "workflow_resume_from_checkpoint",
+                extra={
+                    "thread_id": resume_thread_id,
+                    "next_node": next_node,
+                    "steps": steps,
+                },
+            )
+        else:
+            next_node, entry_decision = self._route_entry(state)
+            pending_decision = entry_decision
+            steps = 0
+
         max_steps = self._max_steps()
         timeout_seconds = self._run_timeout_seconds()
+        # 续跑时重置看门狗计时：以"恢复后的实际运行时间"重新约束超时。
         started_at = time.monotonic()
-        steps = 0
-        pending_decision = entry_decision
 
         while next_node != self.END:
             self._raise_if_run_timed_out(
@@ -120,6 +172,34 @@ class PythonWorkflowEngine:
                 )
 
             node_name = next_node
+
+            # ⭐ 断点续跑：在节点执行前持久化 checkpoint，
+            # 即使该节点执行中崩溃，也可从本 checkpoint 重新执行该节点。
+            if thread_id:
+                await self._save_checkpoint(
+                    state, node_name, steps, pending_decision, thread_id
+                )
+
+            # ⭐ HITL 人工介入：在执行指定节点前暂停，等待人工输入。
+            # 断点已落盘，人工输入注入后可通过 resume_thread_id 从本节点续跑。
+            hitl_pause_before = (config or {}).get("configurable", {}).get(
+                "hitl_pause_before"
+            )
+            if hitl_pause_before and node_name == hitl_pause_before:
+                raise WorkflowPausedError(
+                    "workflow paused for human input",
+                    current_node=node_name,
+                    step_index=steps,
+                    elapsed_ms=self._elapsed_ms(started_at),
+                    details={
+                        "pause_node": node_name,
+                        "prompt": (
+                            f"工作流已在节点「{node_name}」前暂停，"
+                            "等待人工确认或补充指令后继续。"
+                        ),
+                    },
+                )
+
             node_update = await self._run_node(node_name, state)
             await self._raise_if_run_cancelled(
                 state,
@@ -170,6 +250,57 @@ class PythonWorkflowEngine:
             reason="workflow_entry_routed",
             metadata={"route": route},
         )
+
+    async def _save_checkpoint(
+        self,
+        state: AgentState,
+        next_node: str,
+        steps: int,
+        pending_decision: dict | None,
+        thread_id: str,
+    ) -> None:
+        """Best-effort 持久化断点：在节点执行前保存完整状态与下一个要执行的节点。
+
+        续跑时只需从这份 checkpoint 恢复 ``next_node`` 重新执行即可，
+        无需重跑已完成的节点（已完成的节点结果已合并进 ``state``）。
+        """
+        try:
+            from app.utils.redis_client import get_redis
+
+            redis = await get_redis()
+            payload = json.dumps(
+                {
+                    "state": state,
+                    "next_node": next_node,
+                    "steps": steps,
+                    "pending_decision": pending_decision,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+            await redis.save_checkpoint(thread_id, "main", payload)
+        except Exception as exc:  # pragma: no cover - checkpoint 失败不应阻断主流程
+            logger.warning(
+                "workflow_checkpoint_save_failed",
+                extra={"thread_id": thread_id, "error": str(exc)},
+            )
+
+    async def _load_checkpoint(self, thread_id: str) -> dict | None:
+        """读取最近一次断点；不存在或读取失败时返回 ``None``。"""
+        try:
+            from app.utils.redis_client import get_redis
+
+            redis = await get_redis()
+            raw = await redis.get_checkpoint(thread_id, "main")
+            if not raw:
+                return None
+            return json.loads(raw)
+        except Exception as exc:  # pragma: no cover - 读取失败视为无可恢复断点
+            logger.warning(
+                "workflow_checkpoint_load_failed",
+                extra={"thread_id": thread_id, "error": str(exc)},
+            )
+            return None
 
     async def _run_node(self, node_name: str, state: AgentState) -> dict:
         try:
