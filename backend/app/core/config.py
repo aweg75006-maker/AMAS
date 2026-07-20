@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     harness_manifest: str = "default_research.json"
     workflow_engine: Literal["langgraph", "python"] = "python"
 
+    # ─── 集成 / 被动触发 (P3) ───
+    feishu_webhook_url: Optional[str] = None
+    webhook_trigger_token: Optional[str] = None
+    cron_enabled: bool = False
+    cron_poll_interval_seconds: float = 30.0
+    # 通过环境变量 CRON_JOBS 注入 JSON 数组，作为启动时预置的定时任务。
+    cron_jobs: list[dict[str, Any]] = []
+
     total_token_budget: int = 128_000
 
     rag_chroma_db_path: Path = Field(default=APP_DIR / "rag" / "chroma_db")
@@ -157,6 +165,10 @@ class Settings(BaseSettings):
             "node_policy_version": self.node_policy_version,
             "harness_manifest": self.harness_manifest,
             "workflow_engine": self.workflow_engine,
+            "feishu_configured": bool(self.feishu_webhook_url),
+            "webhook_trigger_configured": bool(self.webhook_trigger_token),
+            "cron_enabled": self.cron_enabled,
+            "cron_poll_interval_seconds": self.cron_poll_interval_seconds,
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),

@@ -8,6 +8,7 @@ from app.api.routes_history import router as history_router
 from app.api.routes_knowledge import router as knowledge_router
 from app.api.routes_members import router as members_router
 from app.api.routes_sessions import router as sessions_router
+from app.api.routes_triggers import router as triggers_router
 from app.api.routes_workflow import router as workflow_router
 
 
@@ -21,3 +22,4 @@ router.include_router(knowledge_router)
 router.include_router(sessions_router)
 router.include_router(chat_router)
 router.include_router(workflow_router)
+router.include_router(triggers_router)

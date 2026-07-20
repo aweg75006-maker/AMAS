@@ -57,6 +57,22 @@
   - `POST /chat/resume`：`{ "thread_id", "resume_instruction?", "human_input?" }` —— 从断点恢复，可追加补充指令或人工输入。
   - `POST /chat` 支持 `hitl_pause_before` 字段，声明需要在哪个节点前暂停等待人工介入。
 
+### 🔔 被动触发（Webhook + Cron）
+
+研究任务不仅能在对话中发起，也能由外部系统或定时器自动驱动，完成后推送飞书通知。
+
+- **Webhook 被动触发**：外部系统（如飞书事件、CI、监控告警）携带令牌调用 `POST /api/triggers/webhook` 即可触发一次研究；请求立即返回 `accepted`，研究在后台执行，结果（默认）通过飞书自定义机器人推送卡片。
+  - 请求体：`{ "token", "query", "search_mode?", "session_id?", "knowledge_base_id?", "notify?", "notify_webhook_url?", "tenant_id?", "user_id?" }`
+  - 令牌校验：服务端配置 `WEBHOOK_TRIGGER_TOKEN`，未配置返回 `503`；令牌不符返回 `401`。
+- **Cron 定时调度**：通过 `POST /api/triggers/cron/jobs` 注册定时研究任务，支持三种调度：
+  - `{"type":"interval","seconds":3600}` 每 N 秒
+  - `{"type":"daily","hour":9,"minute":0}` 每天本地时区 H:M
+  - `{"type":"cron","expr":"0 9 * * *"}` 标准 5 段 crontab（支持 `*` / `,` / `-` / `*/n`）
+  - 任务持久化到 Redis（key：`trigger:cron_job:{id}`，Redis 不可用时降级内存），后台循环按 `CRON_POLL_INTERVAL_SECONDS` 轮询到期任务并异步执行 + 飞书通知。
+  - 管理接口：`GET/POST /api/triggers/cron/jobs`、`GET/PATCH/DELETE /api/triggers/cron/jobs/{id}`、`POST /api/triggers/cron/jobs/{id}/run`（立即执行一次，便于调试）。
+- **飞书通知**：`app/integrations/feishu.py` 的 `FeishuNotifier` 向自定义机器人 webhook 推送文本/消息卡片，best-effort（失败仅记日志，不阻断主流程）；webhook 通过 `FEISHU_WEBHOOK_URL` 配置。
+- **配置项**（backend/.env）：`FEISHU_WEBHOOK_URL`、`WEBHOOK_TRIGGER_TOKEN`、`CRON_ENABLED`、`CRON_POLL_INTERVAL_SECONDS`、`CRON_JOBS`（可选，启动预置任务 JSON 数组）。
+
 ---
 
 <a id="preview"></a>

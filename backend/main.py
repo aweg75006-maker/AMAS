@@ -1,5 +1,6 @@
 import uuid
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,27 @@ configure_logging()
 logger = get_logger("iris.main")
 logger.info("config_loaded", extra={"config": settings.safe_summary()})
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动：若启用 Cron，拉起后台调度循环。
+    if settings.cron_enabled:
+        from app.services.trigger_scheduler import get_trigger_scheduler
+
+        scheduler = get_trigger_scheduler()
+        await scheduler.start()
+        logger.info("cron_scheduler_started_on_boot")
+    yield
+    # 关闭：停止调度循环。
+    if settings.cron_enabled:
+        from app.services.trigger_scheduler import get_trigger_scheduler
+
+        scheduler = get_trigger_scheduler()
+        await scheduler.stop()
+        logger.info("cron_scheduler_stopped_on_shutdown")
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
