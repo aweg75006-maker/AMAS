@@ -115,3 +115,6 @@ class AgentState(TypedDict, total=False):
     candidate_pool: List[RetrievalCandidateDict]
     ranked_evidence: List[RetrievalCandidateDict]
     retrieval_iteration: int
+    retrieval_hints: List[str]
+    coverage_gap: str
+    follow_up_queries: List[str]

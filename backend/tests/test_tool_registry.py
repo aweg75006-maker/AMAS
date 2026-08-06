@@ -22,6 +22,9 @@ def test_default_tool_registry_contains_research_tools():
         "web.retrieve_candidates",
     } <= names
     assert registry.get("web.search").input_schema == "query:string"
+    assert registry.get("rag.relevance_grade").output_schema == (
+        "sufficient:boolean, coverage_gap:string, follow_up_queries:list[string]"
+    )
 
 
 def test_tool_registry_rejects_duplicate_names():

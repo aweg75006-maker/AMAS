@@ -23,6 +23,7 @@ class ResearchState(TypedDict, total=False):
     workflow_state: dict[str, Any]
     query: str
     plan: list[str]
+    retrieval_hints: list[str]
     search_mode: str
     knowledge_base_id: str
     active_queries: list[str]
@@ -34,6 +35,7 @@ class ResearchState(TypedDict, total=False):
     retrieval_iteration: int
     max_retrieval_iterations: int
     coverage_gap: str
+    follow_up_queries: list[str]
     search_results: list[str]
     should_stop: bool
     tool_runs: list[dict[str, Any]]
@@ -101,7 +103,9 @@ def _web_candidate(raw: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def initialize_research(state: ResearchState) -> dict[str, Any]:
-    queries = _unique_queries([state["query"], *state.get("plan", [])])
+    queries = _unique_queries(
+        [state["query"], *state.get("plan", []), *state.get("retrieval_hints", [])]
+    )
     return {
         "active_queries": queries or [state["query"]],
         "local_candidates": [],
@@ -114,6 +118,8 @@ def initialize_research(state: ResearchState) -> dict[str, Any]:
             "max_retrieval_iterations", settings.rag_max_retrieval_iterations
         ),
         "tool_runs": state.get("tool_runs", []),
+        "coverage_gap": "",
+        "follow_up_queries": [],
     }
 
 
@@ -212,7 +218,11 @@ def rerank_candidates(state: ResearchState) -> dict[str, Any]:
 def evaluate_evidence(state: ResearchState) -> dict[str, Any]:
     ranked = state.get("ranked_evidence", [])
     if not ranked:
-        return {"context_sufficient": False, "coverage_gap": "没有检索到可用证据"}
+        return {
+            "context_sufficient": False,
+            "coverage_gap": "没有检索到可用证据",
+            "follow_up_queries": [],
+        }
     context = "\n\n".join(
         f"[{candidate['source_type']} | {candidate['title']}] {candidate['text']}"
         for candidate in ranked
@@ -227,10 +237,26 @@ def evaluate_evidence(state: ResearchState) -> dict[str, Any]:
         metadata={"candidate_count": len(ranked)},
     )
     _append_tool_run(tool_runs, result)
-    sufficient = bool(result.ok and "YES" in str(result.value).upper())
+    if result.ok and isinstance(result.value, dict):
+        assessment = result.value
+    else:
+        assessment = {
+            "sufficient": bool(result.ok and "YES" in str(result.value).upper()),
+            "coverage_gap": "",
+            "follow_up_queries": [],
+        }
+    sufficient = assessment.get("sufficient") is True or (
+        str(assessment.get("sufficient", "")).strip().lower() == "true"
+    )
+    coverage_gap = str(assessment.get("coverage_gap", "")).strip()
+    raw_follow_up_queries = assessment.get("follow_up_queries", [])
+    if not isinstance(raw_follow_up_queries, list):
+        raw_follow_up_queries = []
+    follow_up_queries = _unique_queries(raw_follow_up_queries, limit=3)
     return {
         "context_sufficient": sufficient,
-        "coverage_gap": "" if sufficient else "现有候选无法充分回答问题",
+        "coverage_gap": "" if sufficient else coverage_gap or "现有候选无法充分回答问题",
+        "follow_up_queries": [] if sufficient else follow_up_queries,
         "tool_runs": tool_runs,
     }
 
@@ -245,10 +271,14 @@ def route_after_evaluation(state: ResearchState) -> Literal["finalize", "refine_
 
 def refine_query(state: ResearchState) -> dict[str, Any]:
     iteration = state.get("retrieval_iteration", 0) + 1
-    refined = f"{state['query']} 权威来源 关键事实 数据"
-    logger.info("research_query_refined", extra={"iteration": iteration})
+    suggested = _unique_queries(state.get("follow_up_queries", []), limit=3)
+    refined = suggested or [f"{state['query']} 权威来源 关键事实 数据"]
+    logger.info(
+        "research_query_refined",
+        extra={"iteration": iteration, "query_count": len(refined)},
+    )
     return {
-        "active_queries": [refined],
+        "active_queries": refined,
         "local_candidates": [],
         "web_candidates": [],
         "retrieval_iteration": iteration,
@@ -316,6 +346,7 @@ def research_node(state: AgentState) -> dict[str, Any]:
             "workflow_state": dict(state),
             "query": state["query"],
             "plan": state.get("plan", []),
+            "retrieval_hints": state.get("retrieval_hints", []),
             "search_mode": state.get("search_mode", "hybrid"),
             "knowledge_base_id": state.get("knowledge_base_id", "kb_default"),
             "max_retrieval_iterations": settings.rag_max_retrieval_iterations,
@@ -335,5 +366,7 @@ def research_node(state: AgentState) -> dict[str, Any]:
         "candidate_pool": result.get("candidate_pool", []),
         "ranked_evidence": result.get("ranked_evidence", []),
         "retrieval_iteration": result.get("retrieval_iteration", 0),
+        "coverage_gap": result.get("coverage_gap", ""),
+        "follow_up_queries": result.get("follow_up_queries", []),
         "_tool_runs": result.get("tool_runs", []),
     }

@@ -127,6 +127,40 @@ def test_researcher_refines_the_query_until_the_retrieval_budget_is_used(monkeyp
     assert "权威来源" in local_queries[-1]
 
 
+def test_researcher_uses_structured_follow_up_queries_from_evidence_grade(monkeypatch):
+    registry = ToolRegistry()
+    calls = []
+    _register_research_tools(
+        registry,
+        calls,
+        grade={
+            "sufficient": False,
+            "coverage_gap": "缺少官方统计数据",
+            "follow_up_queries": ["IRIS 官方统计数据", "IRIS release metrics"],
+        },
+    )
+    monkeypatch.setattr(researcher, "get_reranker", lambda: FakeReranker())
+    monkeypatch.setattr(researcher.settings, "rag_max_retrieval_iterations", 1)
+
+    reset_tool_registry_for_tests(registry)
+    try:
+        result = researcher.research_node(
+            {
+                "query": "IRIS 工具注册是什么",
+                "plan": [],
+                "search_mode": "hybrid",
+                "knowledge_base_id": "kb_test",
+            }
+        )
+    finally:
+        reset_tool_registry_for_tests(None)
+
+    local_queries = [payload["query"] for name, payload in calls if name == "rag.retrieve_candidates"]
+    assert result["coverage_gap"] == "缺少官方统计数据"
+    assert "IRIS 官方统计数据" in local_queries
+    assert "IRIS release metrics" in local_queries
+
+
 def test_research_subgraph_exposes_the_retrieval_loop():
     mermaid = researcher.create_research_graph().get_graph().draw_mermaid()
 

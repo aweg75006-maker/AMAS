@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.rag.engine import get_candidate_documents, get_retriever
@@ -33,9 +34,9 @@ def register_research_tools(registry: ToolRegistry) -> None:
         ToolSpec(
             name="rag.relevance_grade",
             handler=_rag_relevance_grade,
-            description="Judge whether retrieved local documents are relevant.",
+            description="Assess evidence coverage and propose follow-up retrieval queries.",
             input_schema="query:string, document_context:string",
-            output_schema="grade:YES|NO",
+            output_schema="sufficient:boolean, coverage_gap:string, follow_up_queries:list[string]",
             tags=("rag", "llm", "grader"),
         )
     )
@@ -77,21 +78,26 @@ def _rag_retrieve_candidates(payload: dict[str, Any], context: ToolContext):
     )
 
 
-def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> str:
+def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     query = payload["query"]
     raw_context = payload.get("document_context", "")
     grader_prompt = f"""
-    你是一个严格的文档相关性评估员。
+    你是一个严格的 RAG 证据评估员。
     
     用户问题: {query}
     检索到的文档片段: 
     {raw_context[:2000]} (截取部分)
     
-    请判断：这些文档片段是否包含回答用户问题所需的信息？
-    - 如果文档完全不相关（例如问'吃什么'但文档是'深度学习'），请回答 "NO"。
-    - 如果文档相关或部分相关，请回答 "YES"。
-    
-    只输出 "YES" 或 "NO"，不要输出其他内容。
+    请判断这些证据能否完整、可靠地回答问题，并且只输出 JSON：
+    {{
+      "sufficient": true,
+      "coverage_gap": "",
+      "follow_up_queries": []
+    }}
+
+    若证据不足，设置 sufficient=false，写出具体 coverage_gap，
+    并提供 1 到 3 条可直接用于搜索引擎的 follow_up_queries。
+    不要使用 Markdown 代码块，不要输出 JSON 之外的内容。
     """
     from app.utils.budget_enforcer import create_enforcer_from_state
 
@@ -102,7 +108,45 @@ def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> str:
         grader_prompt,
         dict(context.state),
     )
-    return response.content.strip().upper()
+    return _parse_evidence_assessment(response.content)
+
+
+def _parse_evidence_assessment(content: str) -> dict[str, Any]:
+    """Normalize an LLM assessment without allowing malformed output into retrieval."""
+    raw = (content or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`").removeprefix("json").strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {
+            "sufficient": "YES" in raw.upper(),
+            "coverage_gap": "评估结果格式无效，无法确定证据缺口",
+            "follow_up_queries": [],
+        }
+    if not isinstance(payload, dict):
+        return {
+            "sufficient": False,
+            "coverage_gap": "评估结果不是 JSON 对象，无法确定证据缺口",
+            "follow_up_queries": [],
+        }
+
+    queries = payload.get("follow_up_queries", [])
+    if not isinstance(queries, list):
+        queries = []
+    normalized = []
+    for query in queries:
+        value = " ".join(str(query).split())
+        if value and value not in normalized:
+            normalized.append(value[:180])
+        if len(normalized) == 3:
+            break
+    return {
+        "sufficient": payload.get("sufficient") is True
+        or str(payload.get("sufficient", "")).strip().lower() == "true",
+        "coverage_gap": str(payload.get("coverage_gap", "")).strip()[:500],
+        "follow_up_queries": normalized,
+    }
 
 
 def _web_search(payload: dict[str, Any], context: ToolContext) -> str:

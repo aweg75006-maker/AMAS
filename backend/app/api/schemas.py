@@ -10,6 +10,7 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     knowledge_base_id: Optional[str] = None
     pinned_turn_ids: Optional[List[str]] = None
+    retrieval_hints: Optional[List[str]] = None
 
 
 class SessionResponse(BaseModel):

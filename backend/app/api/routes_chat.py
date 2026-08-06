@@ -57,6 +57,7 @@ async def chat_endpoint(
         pinned_turn_ids=request.pinned_turn_ids,
     )
     initial_state["knowledge_base_id"] = knowledge_base_id
+    initial_state["retrieval_hints"] = request.retrieval_hints or []
 
     session_id = initial_state["session_id"]
     turn_id = initial_state["turn_id"]
