@@ -1,7 +1,11 @@
 import pytest
 
 from app.models.domain import ChatSessionRecord, ChatTurnRecord
-from app.repositories.chat_history_repository import PostgresChatHistoryRepository
+from app.repositories.chat_history_repository import (
+    InMemoryChatHistoryRepository,
+    PostgresChatHistoryRepository,
+    get_chat_history_repository,
+)
 from tests.test_knowledge_base_repository import FakeConnection, FakePool
 
 
@@ -75,3 +79,49 @@ async def test_postgres_chat_history_repository_lists_sessions_with_filters():
     assert "tenant_id = $1" in conn.last_fetch_sql
     assert "user_id = $2" in conn.last_fetch_sql
     assert conn.last_fetch_args == ("tenant_1", "user_1", 10)
+
+
+@pytest.mark.asyncio
+async def test_in_memory_chat_history_repository_persists_and_filters_records():
+    repository = InMemoryChatHistoryRepository()
+    session = ChatSessionRecord(
+        session_id="iris_memory",
+        tenant_id="default",
+        user_id="user_1",
+        title="内存会话",
+        updated_at=2.0,
+    )
+    await repository.save_session(session)
+    await repository.save_turn(
+        ChatTurnRecord(
+            turn_id="turn_1",
+            session_id=session.session_id,
+            tenant_id="default",
+            user_id="user_1",
+            turn_number=1,
+            query="first",
+        )
+    )
+    await repository.save_turn(
+        ChatTurnRecord(
+            turn_id="turn_2",
+            session_id=session.session_id,
+            tenant_id="default",
+            user_id="user_1",
+            turn_number=2,
+            query="second",
+        )
+    )
+
+    sessions = await repository.list_sessions("default", user_id="user_1")
+    turns = await repository.list_turns(session.session_id)
+
+    assert [item.session_id for item in sessions] == [session.session_id]
+    assert [item.turn_id for item in turns] == ["turn_2", "turn_1"]
+
+
+@pytest.mark.asyncio
+async def test_default_chat_history_repository_is_in_memory():
+    repository = await get_chat_history_repository()
+
+    assert isinstance(repository, InMemoryChatHistoryRepository)

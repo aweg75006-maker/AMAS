@@ -1,12 +1,10 @@
 import asyncio
 from uuid import uuid4
 
-from app.core.config import settings
 from app.core.identity import RequestContext
 from app.core.security import create_access_token
 from app.models.domain import SessionMeta, TenantRole, TurnRecord
-from app.repositories.chat_history_repository import PostgresChatHistoryRepository
-from app.services.chat_history_service import ChatHistoryService
+from app.services.chat_history_service import get_chat_history_service
 from app.utils.budget_ledger import BudgetSnapshot
 
 
@@ -16,40 +14,33 @@ def _persist_history_session(
     user_id: str,
     username: str = "history",
 ):
-    dsn = settings.secret_value(settings.postgres_dsn)
-    assert dsn
     suffix = uuid4().hex[:10]
     session_id = f"iris_route_{suffix}"
 
     async def persist():
-        repository = PostgresChatHistoryRepository(dsn)
-        await repository.connect()
-        try:
-            service = ChatHistoryService(repository)
-            await service.persist_completed_turn(
-                session_meta=SessionMeta(
-                    session_id=session_id,
-                    turns_count=1,
-                    total_budget=128000,
-                ),
-                turn_record=TurnRecord(
-                    turn_id=f"turn_{suffix}",
-                    turn_number=1,
-                    query="路由历史测试",
-                    final_report="历史报告",
-                ),
-                context=RequestContext(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    username=username,
-                    role=TenantRole.MEMBER.value,
-                    auth_source="jwt",
-                ),
-                knowledge_base_id="kb_history",
-                snapshot=BudgetSnapshot(session_id=session_id, turn_number=1),
-            )
-        finally:
-            await repository.close()
+        service = await get_chat_history_service()
+        await service.persist_completed_turn(
+            session_meta=SessionMeta(
+                session_id=session_id,
+                turns_count=1,
+                total_budget=128000,
+            ),
+            turn_record=TurnRecord(
+                turn_id=f"turn_{suffix}",
+                turn_number=1,
+                query="路由历史测试",
+                final_report="历史报告",
+            ),
+            context=RequestContext(
+                tenant_id="default",
+                user_id=user_id,
+                username=username,
+                role=TenantRole.MEMBER.value,
+                auth_source="jwt",
+            ),
+            knowledge_base_id="kb_history",
+            snapshot=BudgetSnapshot(session_id=session_id, turn_number=1),
+        )
 
     asyncio.run(persist())
     return session_id
@@ -79,16 +70,16 @@ def test_history_sessions_list_mine_scope(client):
     assert any(item["session_id"] == session_id for item in body["items"])
 
 
-def test_history_session_detail_hides_other_tenant(client):
+def test_history_session_detail_hides_other_user(client):
     session_id = _persist_history_session(
-        tenant_id="tenant_history_a",
-        user_id="user_history_a",
+        tenant_id="default",
+        user_id="user_history_b",
     )
     token = create_access_token(
         user_id="user_history_a",
         username="history",
-        tenant_id="tenant_history_b",
-        role=TenantRole.OWNER.value,
+        tenant_id="default",
+        role=TenantRole.MEMBER.value,
         expires_in=60,
     )
 

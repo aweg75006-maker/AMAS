@@ -29,6 +29,8 @@ def test_safe_summary_masks_secrets():
     assert "node_policy_version" in summary
     assert "harness_manifest" in summary
     assert "workflow_engine" in summary
+    assert "multi_tenant_enabled" in summary
+    assert "chat_history_backend" in summary
 
 
 def test_default_workflow_engine_is_langgraph():
@@ -37,6 +39,8 @@ def test_default_workflow_engine_is_langgraph():
     settings = Settings()
 
     assert settings.workflow_engine == "langgraph"
+    assert settings.multi_tenant_enabled is False
+    assert settings.chat_history_backend == "memory"
 
 
 def test_missing_required_secrets_raise_configuration_error():

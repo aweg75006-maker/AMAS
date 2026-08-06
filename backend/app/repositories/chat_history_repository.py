@@ -40,6 +40,50 @@ class ChatHistoryRepository(Protocol):
         ...
 
 
+class InMemoryChatHistoryRepository:
+    """Process-local chat history store for local development and tests."""
+
+    backend_name = "memory"
+
+    def __init__(self) -> None:
+        self._sessions: dict[str, ChatSessionRecord] = {}
+        self._turns: dict[str, dict[str, ChatTurnRecord]] = {}
+
+    async def save_session(self, session: ChatSessionRecord) -> None:
+        self._sessions[session.session_id] = session
+
+    async def save_turn(self, turn: ChatTurnRecord) -> None:
+        self._turns.setdefault(turn.session_id, {})[turn.turn_id] = turn
+
+    async def get_session(self, session_id: str) -> ChatSessionRecord | None:
+        return self._sessions.get(session_id)
+
+    async def list_sessions(
+        self,
+        tenant_id: str,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+    ) -> list[ChatSessionRecord]:
+        sessions = [
+            session
+            for session in self._sessions.values()
+            if session.tenant_id == tenant_id and (not user_id or session.user_id == user_id)
+        ]
+        sessions.sort(key=lambda session: session.updated_at, reverse=True)
+        return sessions[:limit]
+
+    async def list_turns(
+        self,
+        session_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[ChatTurnRecord]:
+        turns = list(self._turns.get(session_id, {}).values())
+        turns.sort(key=lambda turn: turn.turn_number, reverse=True)
+        return turns[:limit]
+
+
 class PostgresChatHistoryRepository:
     """PostgreSQL repository for durable chat session history."""
 
@@ -231,9 +275,13 @@ class PostgresChatHistoryRepository:
 
 
 _postgres_chat_history_repositories: dict[int, PostgresChatHistoryRepository] = {}
+_memory_chat_history_repository = InMemoryChatHistoryRepository()
 
 
 async def get_chat_history_repository() -> ChatHistoryRepository:
+    if settings.chat_history_backend == "memory":
+        return _memory_chat_history_repository
+
     dsn = settings.secret_value(settings.postgres_dsn)
     if not dsn:
         raise ConfigurationError("会话历史存储需要配置 POSTGRES_DSN。")

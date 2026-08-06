@@ -1,5 +1,6 @@
 from fastapi import Header
 
+from app.core.config import settings
 from app.core.identity import (
     DEFAULT_TENANT_ID,
     DEFAULT_USER_ID,
@@ -18,7 +19,11 @@ async def get_request_context(
     if authorization and authorization.lower().startswith("bearer "):
         payload = decode_access_token(authorization.split(" ", 1)[1].strip())
         return RequestContext(
-            tenant_id=clean_context_id(payload.get("tenant_id"), DEFAULT_TENANT_ID),
+            tenant_id=(
+                clean_context_id(payload.get("tenant_id"), DEFAULT_TENANT_ID)
+                if settings.multi_tenant_enabled
+                else DEFAULT_TENANT_ID
+            ),
             user_id=clean_context_id(payload.get("sub"), DEFAULT_USER_ID),
             username=clean_context_id(payload.get("username"), ""),
             role=clean_context_id(payload.get("role"), ""),
@@ -26,7 +31,11 @@ async def get_request_context(
         )
 
     return RequestContext(
-        tenant_id=clean_context_id(x_tenant_id, DEFAULT_TENANT_ID),
+        tenant_id=(
+            clean_context_id(x_tenant_id, DEFAULT_TENANT_ID)
+            if settings.multi_tenant_enabled
+            else DEFAULT_TENANT_ID
+        ),
         user_id=clean_context_id(x_user_id, DEFAULT_USER_ID),
         auth_source="headers",
     )

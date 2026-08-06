@@ -22,7 +22,7 @@ logger = get_logger("iris.chat_history")
 
 
 class ChatHistoryService:
-    """Persists completed chat turns into durable PostgreSQL history."""
+    """Persists completed chat turns through the configured history repository."""
 
     def __init__(self, repository: ChatHistoryRepository):
         self.repository = repository

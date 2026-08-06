@@ -49,8 +49,11 @@ class Settings(BaseSettings):
     redis_checkpoint_ttl: int = 604_800
 
     knowledge_metadata_backend: Literal["redis", "postgres"] = "redis"
+    chat_history_backend: Literal["memory", "postgres"] = "memory"
     postgres_dsn: Optional[SecretStr] = None
     postgres_auto_migrate: bool = True
+
+    multi_tenant_enabled: bool = False
 
     seed_default_user_enabled: bool = False
     seed_default_tenant_name: str = "默认租户"
@@ -171,6 +174,8 @@ class Settings(BaseSettings):
             "node_policy_version": self.node_policy_version,
             "harness_manifest": self.harness_manifest,
             "workflow_engine": self.workflow_engine,
+            "multi_tenant_enabled": self.multi_tenant_enabled,
+            "chat_history_backend": self.chat_history_backend,
             "feishu_configured": bool(self.feishu_webhook_url),
             "webhook_trigger_configured": bool(self.webhook_trigger_token),
             "cron_enabled": self.cron_enabled,

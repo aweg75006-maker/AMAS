@@ -12,13 +12,13 @@ def test_clean_context_id_defaults_and_sanitizes():
 
 
 @pytest.mark.asyncio
-async def test_get_request_context_from_headers():
+async def test_single_tenant_mode_ignores_tenant_header():
     context = await get_request_context(
         x_tenant_id="tenant-a",
         x_user_id="user/one",
     )
 
-    assert context.tenant_id == "tenant-a"
+    assert context.tenant_id == DEFAULT_TENANT_ID
     assert context.user_id == "user_one"
 
 
@@ -31,7 +31,7 @@ async def test_get_request_context_defaults():
 
 
 @pytest.mark.asyncio
-async def test_get_request_context_prefers_bearer_token():
+async def test_single_tenant_mode_ignores_bearer_tenant_claim():
     token = create_access_token(
         user_id="user_token",
         username="token-user",
@@ -46,8 +46,22 @@ async def test_get_request_context_prefers_bearer_token():
         x_user_id="user_header",
     )
 
-    assert context.tenant_id == "tenant_token"
+    assert context.tenant_id == DEFAULT_TENANT_ID
     assert context.user_id == "user_token"
     assert context.username == "token-user"
     assert context.role == "owner"
     assert context.auth_source == "jwt"
+
+
+@pytest.mark.asyncio
+async def test_multi_tenant_mode_can_be_reenabled(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "multi_tenant_enabled", True)
+    context = await get_request_context(
+        x_tenant_id="tenant-a",
+        x_user_id="user/one",
+    )
+
+    assert context.tenant_id == "tenant-a"
+    assert context.user_id == "user_one"
