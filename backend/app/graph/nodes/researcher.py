@@ -346,7 +346,10 @@ def research_node(state: AgentState) -> dict[str, Any]:
             "workflow_state": dict(state),
             "query": state["query"],
             "plan": state.get("plan", []),
-            "retrieval_hints": state.get("retrieval_hints", []),
+            "retrieval_hints": [
+                *state.get("retrieval_hints", []),
+                *([state["human_input"]] if state.get("human_input") else []),
+            ],
             "search_mode": state.get("search_mode", "hybrid"),
             "knowledge_base_id": state.get("knowledge_base_id", "kb_default"),
             "max_retrieval_iterations": settings.rag_max_retrieval_iterations,

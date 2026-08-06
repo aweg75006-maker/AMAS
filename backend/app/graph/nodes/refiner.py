@@ -18,6 +18,8 @@ def _find_latest_report(state: AgentState) -> str:
 
 def refine_node(state: AgentState):
     query = state["query"]               # 修改指令，例如 "把第一章改详细点"
+    if state.get("human_input"):
+        query = f"{query}\n人工补充：{state['human_input']}"
     old_report = _find_latest_report(state)
 
     logger.info(

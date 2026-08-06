@@ -9,6 +9,7 @@ from app.core.exceptions import ConfigurationError
 from app.core.logging import get_logger
 from app.graph.state import AgentState
 from app.harness.registry import get_harness_node
+from langgraph.types import interrupt
 
 
 logger = get_logger("iris.graph.runtime")
@@ -41,7 +42,23 @@ def wrap_node(
     node_name: str,
     fn: Callable[[AgentState], dict],
 ) -> Callable[[AgentState], object]:
-    async def wrapped(state: AgentState) -> dict:
+    async def wrapped(
+        state: AgentState,
+        config: dict | None = None,
+    ) -> dict:
+        effective_state = dict(state)
+        if effective_state.get("hitl_pause_before") == node_name:
+            human_input = interrupt(
+                {
+                    "pause_node": node_name,
+                    "prompt": f"工作流将在节点「{node_name}」执行前暂停，等待人工补充。",
+                    "thread_id": (config or {}).get("configurable", {}).get("thread_id", ""),
+                }
+            )
+            if isinstance(human_input, dict):
+                human_input = human_input.get("human_input", "")
+            effective_state["human_input"] = str(human_input or "").strip()
+            effective_state["hitl_pause_before"] = ""
         try:
             harness_node = get_harness_node(node_name)
         except ConfigurationError:
@@ -75,7 +92,7 @@ def wrap_node(
                     },
                 )
                 result = await asyncio.wait_for(
-                    asyncio.to_thread(fn, state),
+                    asyncio.to_thread(fn, effective_state),
                     timeout=timeout,
                 )
                 if attempt > 1:
@@ -90,6 +107,10 @@ def wrap_node(
                     "workflow_node_attempt_succeeded",
                     extra={"node_name": node_name, "attempt": attempt},
                 )
+                if effective_state.get("human_input"):
+                    result = {**result, "human_input": effective_state["human_input"]}
+                if state.get("hitl_pause_before") == node_name:
+                    result = {**result, "hitl_pause_before": ""}
                 return result
             except asyncio.TimeoutError as exc:
                 last_error = TimeoutError(f"{node_name} timed out after {timeout}s")

@@ -182,6 +182,20 @@
             </div>
 
             <div>
+                <label class="mb-2 block text-xs font-bold text-gray-400 uppercase tracking-wider">Human Checkpoint</label>
+                <select
+                    v-model="hitlPauseBefore"
+                    :disabled="isLoading"
+                    class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
+                >
+                    <option value="">No pause</option>
+                    <option value="planner">Before planning</option>
+                    <option value="researcher">Before research</option>
+                    <option value="writer">Before writing</option>
+                    <option value="reviewer">Before review</option>
+                    <option value="refiner">Before refining</option>
+                </select>
+
                 <div class="relative group">
                     <div class="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
                     <textarea 
@@ -205,6 +219,24 @@
                         <svg v-if="!isLoading" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                     </span>
                 </button>
+
+                <div v-if="hitlPause" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p class="text-xs font-semibold text-amber-900">Paused before {{ hitlPause.pause_node }}</p>
+                    <p class="mt-1 text-[11px] text-amber-700">{{ hitlPause.prompt }}</p>
+                    <textarea
+                        v-model="hitlInput"
+                        rows="3"
+                        class="mt-3 w-full resize-none rounded-lg border border-amber-200 bg-white p-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
+                        placeholder="Add instructions, constraints, or evidence requirements..."
+                    ></textarea>
+                    <button
+                        @click="resumeResearch"
+                        :disabled="isLoading"
+                        class="mt-2 w-full rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                    >
+                        Continue research
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -280,7 +312,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue';
-import { uploadFiles, streamChat, clearContext, getOrCreateSessionId, getCurrentSessionId, clearSession, getSessionInfo, listKnowledgeBases, listKnowledgeBaseDocuments } from './services/api';
+import { uploadFiles, streamChat, resumeChat, clearContext, getOrCreateSessionId, getCurrentSessionId, clearSession, getSessionInfo, listKnowledgeBases, listKnowledgeBaseDocuments } from './services/api';
 import StatusFlow from './components/StatusFlow.vue';
 import MarkdownIt from 'markdown-it';
 // 【修复步骤 1】引入数学公式插件 (必须先 npm install markdown-it-katex)
@@ -320,6 +352,9 @@ const activeKnowledgeBase = ref(null);
 const activeKnowledgeBaseId = ref('kb_default');
 const knowledgeLoading = ref(false);
 const knowledgeError = ref('');
+const hitlPauseBefore = ref('');
+const hitlPause = ref(null);
+const hitlInput = ref('');
 
 // 打字机变量
 const displayedReport = ref('');
@@ -496,6 +531,8 @@ const startResearch = async () => {
     logs.value = []; 
     logs.value.push(`[INIT] System initialized. Mode: ${searchMode.value.toUpperCase()}`);
     displayedReport.value = '';
+    hitlPause.value = null;
+    hitlInput.value = '';
     
     const actualMode = uploadedFiles.value.length === 0 ? 'hybrid' : searchMode.value;
 
@@ -517,6 +554,15 @@ const startResearch = async () => {
             query.value,
             actualMode,
             (data) => {
+                    if (data.step === '__hitl_pause__') {
+                        hitlPause.value = data.data;
+                        currentStep.value = 'paused';
+                        isLoading.value = false;
+                        logs.value.push(`[HITL] Paused before ${data.data.pause_node}. Waiting for input.`);
+                        scrollToBottom();
+                        return;
+                    }
+
                     // Phase 2: 处理会话事件
                     if (data.step === '__session__') {
                         handleSessionEvent(data.data);
@@ -606,13 +652,63 @@ const startResearch = async () => {
                 handleSessionEvent(sessionData);
             },
             sessionId.value,  // 传入当前会话 ID
-            activeKnowledgeBaseId.value
+            activeKnowledgeBaseId.value,
+            hitlPauseBefore.value,
         );
     } catch (e) {
         isLoading.value = false;
         logs.value.push(`[ERROR] Initialization failed: ${e.message}`);
         alert("System Error: " + e.message);
     }
+};
+
+const resumeResearch = async () => {
+    if (!hitlPause.value?.thread_id) return;
+    isLoading.value = true;
+    currentStep.value = hitlPause.value.pause_node || 'planner';
+    logs.value.push(`[HITL] Resuming ${currentStep.value} with human input.`);
+
+    resumeChat(
+        hitlPause.value.thread_id,
+        hitlInput.value,
+        (data) => {
+            if (data.step === '__hitl_pause__') {
+                hitlPause.value = data.data;
+                isLoading.value = false;
+                currentStep.value = 'paused';
+                return;
+            }
+            if (data.step) currentStep.value = data.step;
+            if (data.step === 'planner') {
+                logs.value.push(`[PLANNER] Strategy: [${data.data.plan.join(', ')}]`);
+            } else if (data.step === 'researcher') {
+                logs.value.push(`[RESEARCHER] Data acquisition complete. Items: ${(data.data.search_results || []).length}`);
+            } else if (data.step === 'writer' || data.step === 'refiner') {
+                if (data.data.final_report) {
+                    displayedReport.value = '';
+                    typeWriterEffect(data.data.final_report);
+                }
+            } else if (data.step === 'reviewer') {
+                logs.value.push(`[QA] Review ${data.data.review_status || 'completed'}.`);
+            }
+            scrollToBottom();
+        },
+        () => {
+            isLoading.value = false;
+            currentStep.value = 'done';
+            hitlPause.value = null;
+            hitlInput.value = '';
+            logs.value.push('[DONE] Process complete.');
+            loadSessionHistory();
+            scrollToBottom();
+        },
+        (err) => {
+            isLoading.value = false;
+            logs.value.push(`[ERROR] ${err.message}`);
+            scrollToBottom();
+        },
+        handleSessionEvent,
+    );
 };
 </script>
 

@@ -1,12 +1,15 @@
 import asyncio
 import json
+import sys
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
+from langgraph.types import Command
 
 from app.api.dependencies import get_assembler
 from app.api.rate_limits import chat_rate_limit
-from app.api.schemas import ChatRequest
+from app.api.schemas import ChatRequest, ResumeChatRequest
+from app.core.config import settings
 from app.core.errors import sse_error_event
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
@@ -33,6 +36,7 @@ async def chat_endpoint(
 
     The endpoint streams workflow node updates with SSE.
     """
+    _require_native_hitl_runtime(request.hitl_pause_before)
     kb_service = await get_knowledge_base_service()
     knowledge_base_id = (
         request.knowledge_base_id
@@ -58,6 +62,7 @@ async def chat_endpoint(
     )
     initial_state["knowledge_base_id"] = knowledge_base_id
     initial_state["retrieval_hints"] = request.retrieval_hints or []
+    initial_state["hitl_pause_before"] = request.hitl_pause_before or ""
 
     session_id = initial_state["session_id"]
     turn_id = initial_state["turn_id"]
@@ -73,6 +78,7 @@ async def chat_endpoint(
     return StreamingResponse(
         _chat_event_stream(
             initial_state=initial_state,
+            workflow_input=initial_state,
             config=config,
             assembler=assembler,
             ledger=ledger,
@@ -88,9 +94,69 @@ async def chat_endpoint(
     )
 
 
+@router.post("/chat/resume")
+async def resume_chat_endpoint(
+    request: ResumeChatRequest,
+    http_request: Request,
+    _rate_limit: None = Depends(chat_rate_limit),
+):
+    """Resume a LangGraph workflow paused by a native interrupt()."""
+    _require_native_hitl_runtime(True)
+    config = {"configurable": {"thread_id": request.thread_id}}
+    engine = create_workflow_engine()
+    checkpoint_state = await engine.get_state(config)
+    if not checkpoint_state:
+        raise AppError(
+            code="HITL_CHECKPOINT_NOT_FOUND",
+            message="未找到可恢复的工作流检查点",
+            status_code=404,
+            details={"thread_id": request.thread_id},
+        )
+
+    session_id = checkpoint_state.get("session_id", "")
+    turn_id = checkpoint_state.get("turn_id", "")
+    if not session_id or not turn_id:
+        raise AppError(
+            code="HITL_INVALID_CHECKPOINT",
+            message="工作流检查点缺少会话信息，无法恢复",
+            status_code=409,
+            details={"thread_id": request.thread_id},
+        )
+
+    assembler = await get_assembler()
+    budget_state = checkpoint_state.get("budget_state", {})
+    ledger = BudgetLedger(
+        session_id=session_id,
+        total_budget=budget_state.get("total_budget", settings.total_token_budget),
+    )
+    ledger.begin_turn(checkpoint_state.get("turn_number", 1), turn_id)
+    ledger._session_estimated = budget_state.get("session_estimated_total", 0)
+    ledger._session_actual = budget_state.get("session_actual_total", 0)
+    ledger._compression_savings = budget_state.get("compression_savings", 0)
+
+    return StreamingResponse(
+        _chat_event_stream(
+            initial_state=checkpoint_state,
+            workflow_input=Command(resume={"human_input": request.human_input}),
+            config=config,
+            assembler=assembler,
+            ledger=ledger,
+            memory=None,
+            http_request=http_request,
+            knowledge_base_id=checkpoint_state.get("knowledge_base_id", "kb_default"),
+            query=checkpoint_state.get("query", ""),
+            search_mode=checkpoint_state.get("search_mode", "hybrid"),
+            session_id=session_id,
+            turn_id=turn_id,
+        ),
+        media_type="text/event-stream",
+    )
+
+
 async def _chat_event_stream(
     *,
     initial_state: dict,
+    workflow_input: dict | Command | None = None,
     config: dict,
     assembler: ContextAssembler,
     ledger: BudgetLedger,
@@ -133,7 +199,19 @@ async def _chat_event_stream(
     )
 
     try:
-        async for event in _stream_workflow_events(initial_state, config):
+        async for event in _stream_workflow_events(
+            workflow_input or initial_state,
+            config,
+        ):
+            if "__interrupt__" in event:
+                for interrupt_event in event["__interrupt__"]:
+                    pause_data = getattr(interrupt_event, "value", interrupt_event)
+                    data = json.dumps(
+                        {"step": "__hitl_pause__", "data": pause_data},
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {data}\n\n"
+                return
             for node_name, state_update in event.items():
                 final_state.update(state_update)
                 _record_node_token_estimate(ledger, node_name, state_update)
@@ -206,7 +284,7 @@ async def _chat_event_stream(
     yield "data: [DONE]\n\n"
 
 
-async def _stream_workflow_events(initial_state: dict, config: dict):
+async def _stream_workflow_events(initial_state: dict | Command, config: dict):
     engine = create_workflow_engine()
     async for event in engine.astream(initial_state, config=config):
         yield event
@@ -274,3 +352,14 @@ def _workflow_failure_snapshot(exc: Exception) -> dict:
         "duration_ms": duration_ms,
         "details": details,
     }
+
+
+def _require_native_hitl_runtime(hitl_requested: bool | str | None) -> None:
+    """Native LangGraph interrupts require Python 3.11+ for async graphs."""
+    if hitl_requested and sys.version_info < (3, 11):
+        raise AppError(
+            code="HITL_PYTHON_VERSION_UNSUPPORTED",
+            message="人工暂停/恢复需要 Python 3.11 或更高版本的 LangGraph 运行环境",
+            status_code=503,
+            details={"python_version": sys.version.split()[0]},
+        )

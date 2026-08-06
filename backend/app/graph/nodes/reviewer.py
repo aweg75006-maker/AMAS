@@ -31,6 +31,8 @@ def review_node(state: AgentState):
 
     harness_node = get_harness_node("reviewer")
     prompt_text = get_prompt_template(harness_node.prompt_id).format(query=query, report=report)
+    if state.get("human_input"):
+        prompt_text += f"\n\n人工补充审查要求：{state['human_input']}"
     reviewer_llm = get_llm(model_type="smart")
     response, _ = enforcer.wrap_llm_call("reviewer", reviewer_llm, prompt_text, state)
     raw = response.content

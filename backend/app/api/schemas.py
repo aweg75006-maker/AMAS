@@ -11,6 +11,12 @@ class ChatRequest(BaseModel):
     knowledge_base_id: Optional[str] = None
     pinned_turn_ids: Optional[List[str]] = None
     retrieval_hints: Optional[List[str]] = None
+    hitl_pause_before: Optional[str] = None
+
+
+class ResumeChatRequest(BaseModel):
+    thread_id: str
+    human_input: str = ""
 
 
 class SessionResponse(BaseModel):

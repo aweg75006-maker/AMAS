@@ -25,6 +25,9 @@ def write_node(state: AgentState):
         审查意见如下："{critique}"
         请务必在本次写作中修正上述问题。
         """
+    human_input = state.get("human_input", "").strip()
+    if human_input:
+        critique_section += f"\n【人工补充要求】{human_input}\n"
 
     # Phase 2: 注入跨轮记忆上下文
     memory_context = state.get("memory_context", "")

@@ -8,6 +8,9 @@ logger = get_logger("iris.graph.planner")
 def plan_node(state: AgentState):
     query = state["query"]
     critique = state.get("critique", "")
+    human_input = state.get("human_input", "").strip()
+    if human_input:
+        critique = f"{critique}\n\n人工补充检索要求：{human_input}".strip()
     logger.info(
         "planner_started",
         extra={"query_length": len(query), "critique_length": len(critique)},

@@ -118,3 +118,5 @@ class AgentState(TypedDict, total=False):
     retrieval_hints: List[str]
     coverage_gap: str
     follow_up_queries: List[str]
+    hitl_pause_before: str
+    human_input: str

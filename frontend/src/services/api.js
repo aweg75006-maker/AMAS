@@ -65,19 +65,19 @@ export async function clearContext(knowledgeBaseId = null) {
   return response.json();
 }
 
-export async function streamChat(query, searchMode, onData, onDone, onError, onSession, sessionId, knowledgeBaseId = null) {
+async function streamSse(url, body, onData, onDone, onError, onSession) {
   try {
-    const activeSessionId = sessionId || await getOrCreateSessionId();
-    const response = await fetch(`${API_BASE}/chat`, {
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, search_mode: searchMode, session_id: activeSessionId, knowledge_base_id: knowledgeBaseId }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(await parseError(response, "Chat request failed"));
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let paused = false;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -92,12 +92,44 @@ export async function streamChat(query, searchMode, onData, onDone, onError, onS
           const event = JSON.parse(payload);
           if (event.step === "__session__") onSession?.(event.data);
           else if (event.step === "__error__") onError?.(new Error(event.data.message));
-          else onData(event);
+          else {
+            if (event.step === "__hitl_pause__") paused = true;
+            onData(event);
+          }
         } catch {}
       }
     }
-    onDone();
+    if (!paused) onDone();
   } catch (error) {
     onError(error);
   }
+}
+
+export async function streamChat(query, searchMode, onData, onDone, onError, onSession, sessionId, knowledgeBaseId = null, hitlPauseBefore = null) {
+  const activeSessionId = sessionId || await getOrCreateSessionId();
+  return streamSse(
+    `${API_BASE}/chat`,
+    {
+      query,
+      search_mode: searchMode,
+      session_id: activeSessionId,
+      knowledge_base_id: knowledgeBaseId,
+      hitl_pause_before: hitlPauseBefore || null,
+    },
+    onData,
+    onDone,
+    onError,
+    onSession,
+  );
+}
+
+export async function resumeChat(threadId, humanInput, onData, onDone, onError, onSession) {
+  return streamSse(
+    `${API_BASE}/chat/resume`,
+    { thread_id: threadId, human_input: humanInput },
+    onData,
+    onDone,
+    onError,
+    onSession,
+  );
 }
