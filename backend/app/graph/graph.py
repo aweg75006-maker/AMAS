@@ -1,4 +1,4 @@
-"""Legacy LangGraph topology retained for rollback and parity checks."""
+"""Primary LangGraph topology for the research workflow."""
 
 from langgraph.graph import StateGraph, END
 from app.core.logging import get_logger

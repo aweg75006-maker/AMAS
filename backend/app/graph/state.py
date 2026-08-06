@@ -49,6 +49,20 @@ class BudgetStateDict(TypedDict, total=False):
     compression_savings: int
 
 
+class RetrievalCandidateDict(TypedDict, total=False):
+    """Normalized local or web evidence before and after global reranking."""
+    id: str
+    text: str
+    title: str
+    source_type: str
+    source_uri: str
+    retrieval_score: float
+    rerank_score: float
+    source_rank: int
+    query: str
+    metadata: Dict[str, Any]
+
+
 class AgentState(TypedDict, total=False):
     """
     Agent 的状态定义。
@@ -100,3 +114,8 @@ class AgentState(TypedDict, total=False):
     token_usage_session_total: TokenUsageDict  # 会话累计
     _tool_runs: List[Dict[str, Any]]           # 当前节点产生的工具调用快照
     _route_decisions: List[Dict[str, Any]]     # 当前节点关联的路由决策快照
+
+    # Agentic RAG evidence state
+    candidate_pool: List[RetrievalCandidateDict]
+    ranked_evidence: List[RetrievalCandidateDict]
+    retrieval_iteration: int

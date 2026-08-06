@@ -22,6 +22,8 @@ def test_default_harness_manifest_maps_current_business_flow():
     researcher_tools = {tool.name: tool for tool in manifest.nodes["researcher"].tools}
     assert "web.search" in researcher_tools
     assert researcher_tools["web.search"].timeout_seconds == 45
+    assert "rag.retrieve_candidates" in researcher_tools
+    assert "web.retrieve_candidates" in researcher_tools
 
 
 def test_prompt_template_can_render_planner_prompt():

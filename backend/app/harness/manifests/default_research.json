@@ -24,6 +24,13 @@
           "output_schema": "documents:list"
         },
         {
+          "name": "rag.retrieve_candidates",
+          "timeout_seconds": 30,
+          "max_retries": 1,
+          "input_schema": "query:string, knowledge_base_id:string",
+          "output_schema": "documents:list"
+        },
+        {
           "name": "rag.relevance_grade",
           "timeout_seconds": 45,
           "max_retries": 1,
@@ -36,6 +43,13 @@
           "max_retries": 1,
           "input_schema": "query:string",
           "output_schema": "content:string"
+        },
+        {
+          "name": "web.retrieve_candidates",
+          "timeout_seconds": 45,
+          "max_retries": 1,
+          "input_schema": "query:string",
+          "output_schema": "candidates:list"
         },
         {
           "name": "delegate_to_connector",

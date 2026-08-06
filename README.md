@@ -240,7 +240,7 @@ npm run dev
 | `OPENAI_API_KEY` | 是 | Planner、Writer、Reviewer 等模型调用 |
 | `DASHSCOPE_API_KEY` | 是 | `text-embedding-v4` 文本向量化 |
 | `TAVILY_API_KEY` | Hybrid 模式需要 | 全网搜索 |
-| `WORKFLOW_ENGINE` | 否 | 默认 `python`，可切换为 `langgraph` fallback |
+| `WORKFLOW_ENGINE` | 否 | 固定使用 `langgraph` |
 | `KNOWLEDGE_METADATA_BACKEND` | 否 | 默认 `redis`，可切换为 `postgres` |
 | `POSTGRES_DSN` | PostgreSQL 模式需要 | PostgreSQL 连接串 |
 | `JWT_SECRET_KEY` | 生产环境必需 | JWT 签名密钥 |

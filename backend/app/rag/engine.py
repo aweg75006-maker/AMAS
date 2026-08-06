@@ -51,18 +51,25 @@ class RerankRetriever(BaseRetriever):
     def _get_relevant_documents(self, query: str) -> list[Document]:
         # 1) 先召回更多候选
         candidates: list[Document] = self.vectorstore.similarity_search(query, k=self.fetch_k)
-        if not candidates:
-            return []
+        return rerank_documents(query, candidates, self.reranker, top_k=self.top_k)
 
-        # 2) rerank：对 (query, doc_text) 打分
-        pairs = [(query, d.page_content) for d in candidates]
-        scores = self.reranker.predict(pairs)
 
-        # 3) 按分数排序，取 top_k
-        ranked = sorted(zip(candidates, scores), key=lambda x: float(x[1]), reverse=True)
-        top_docs = [doc for doc, _ in ranked[: self.top_k]]
-
-        return top_docs
+def rerank_documents(
+    query: str,
+    candidates: list[Document],
+    reranker: Any | None = None,
+    *,
+    top_k: int | None = None,
+) -> list[Document]:
+    """Rank document candidates with the shared Cross-Encoder model."""
+    if not candidates:
+        return []
+    model = reranker or get_reranker()
+    pairs = [(query, document.page_content) for document in candidates]
+    scores = model.predict(pairs)
+    ranked = sorted(zip(candidates, scores), key=lambda item: float(item[1]), reverse=True)
+    limit = len(ranked) if top_k is None else max(0, top_k)
+    return [document for document, _ in ranked[:limit]]
 
 # 定义数据存储路径
 DB_PATH = str(settings.rag_chroma_db_path)   # 数据库文件存这里
@@ -177,3 +184,18 @@ def get_retriever(knowledge_base_id: str | None = None):
     fetch_k = settings.rag_fetch_k
     reranker = get_reranker()
     return RerankRetriever(vectorstore=vectorstore, reranker=reranker, top_k=top_k, fetch_k=fetch_k)
+
+
+def get_candidate_documents(
+    query: str,
+    knowledge_base_id: str | None = None,
+) -> list[Document]:
+    """Return wide local recall candidates for cross-source reranking."""
+    db_path = get_db_path(knowledge_base_id)
+    if not os.path.exists(db_path) or not os.listdir(db_path):
+        return []
+    vectorstore = Chroma(
+        persist_directory=db_path,
+        embedding_function=get_embeddings(),
+    )
+    return vectorstore.similarity_search(query, k=settings.rag_fetch_k)

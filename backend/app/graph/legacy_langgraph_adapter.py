@@ -10,7 +10,7 @@ from app.graph.state import AgentState
 
 
 class LangGraphWorkflowEngineAdapter:
-    """Legacy LangGraph runner behind the same workflow engine interface."""
+    """LangGraph runner behind the workflow engine interface."""
 
     async def astream(
         self,

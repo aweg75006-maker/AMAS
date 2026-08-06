@@ -28,7 +28,7 @@ class FakeTraceService:
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_uses_python_engine_when_configured(monkeypatch):
+async def test_chat_stream_uses_configured_workflow_engine(monkeypatch):
     monkeypatch.setattr(
         routes_chat,
         "create_workflow_engine",
@@ -60,7 +60,7 @@ def test_public_state_update_hides_workflow_event():
 def test_workflow_failure_snapshot_normalizes_engine_errors(monkeypatch):
     from app.core.config import settings
 
-    monkeypatch.setattr(settings, "workflow_engine", "python")
+    monkeypatch.setattr(settings, "workflow_engine", "langgraph")
     monkeypatch.setattr(settings, "workflow_run_timeout_seconds", 300)
 
     snapshot = routes_chat._workflow_failure_snapshot(
@@ -76,7 +76,7 @@ def test_workflow_failure_snapshot_normalizes_engine_errors(monkeypatch):
     assert snapshot["error_code"] == "WORKFLOW_RUN_TIMEOUT"
     assert snapshot["node_name"] == "planner"
     assert snapshot["duration_ms"] == 301000
-    assert snapshot["details"]["engine"] == "python"
+    assert snapshot["details"]["engine"] == "langgraph"
     assert snapshot["details"]["workflow_run_timeout_seconds"] == 300
     assert snapshot["details"]["step_index"] == 2
 

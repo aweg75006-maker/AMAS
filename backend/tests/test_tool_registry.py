@@ -14,7 +14,13 @@ def test_default_tool_registry_contains_research_tools():
     registry = get_tool_registry()
     names = {spec.name for spec in registry.list_specs()}
 
-    assert {"rag.retrieve", "rag.relevance_grade", "web.search"} <= names
+    assert {
+        "rag.retrieve",
+        "rag.retrieve_candidates",
+        "rag.relevance_grade",
+        "web.search",
+        "web.retrieve_candidates",
+    } <= names
     assert registry.get("web.search").input_schema == "query:string"
 
 

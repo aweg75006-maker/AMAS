@@ -1,13 +1,8 @@
-# Workflow Engine 灰度切换指南
+# LangGraph 工作流引擎
 
 ## 目标
 
-IRIS 当前支持两套工作流执行引擎：
-
-- `python`：默认引擎，纯 Python Harness/Loop Engine
-- `langgraph`：保留为回滚引擎
-
-两套引擎共用：
+IRIS 使用 LangGraph 作为唯一工作流执行引擎。其节点共用：
 
 - 节点实现：planner、researcher、writer、reviewer、refiner
 - Node Runtime：timeout、retry、结构化日志
@@ -18,13 +13,7 @@ IRIS 当前支持两套工作流执行引擎：
 
 ## 配置方式
 
-默认使用纯 Python 引擎：
-
-```bash
-WORKFLOW_ENGINE=python
-```
-
-回滚到 LangGraph：
+默认并固定使用 LangGraph：
 
 ```bash
 WORKFLOW_ENGINE=langgraph
@@ -34,26 +23,10 @@ WORKFLOW_ENGINE=langgraph
 
 ```bash
 cd /Users/zhang/Downloads/chrome/IRIS-main/backend
-WORKFLOW_ENGINE=python conda run -n iris uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+WORKFLOW_ENGINE=langgraph conda run -n iris uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 如果不设置环境变量，当前默认值也是：
-
-```bash
-WORKFLOW_ENGINE=python
-```
-
-## 灰度建议
-
-推荐顺序：
-
-1. 默认使用 `WORKFLOW_ENGINE=python` 跑后端测试
-2. 测试环境保持 `python`
-3. 验证 `/api/chat` SSE 输出、chat history、tool runs、route decisions
-4. 小流量环境保持 `python`
-5. 稳定后移除 LangGraph 依赖和 checkpoint 代码
-
-回滚默认值：
 
 ```bash
 WORKFLOW_ENGINE=langgraph
@@ -73,15 +46,14 @@ curl -H "Authorization: Bearer <token>" \
 ```json
 {
   "runtime": {
-    "workflow_engine": "python",
+    "workflow_engine": "langgraph",
     "diagnostics": {
-      "active_engine": "python",
-      "available_engines": ["langgraph", "python"],
-      "route_decision_trace_enabled": true,
+      "active_engine": "langgraph",
+      "available_engines": ["langgraph"],
+      "route_decision_trace_enabled": false,
       "tool_trace_enabled": true,
       "node_trace_enabled": true,
-      "rollback_engine": "langgraph",
-      "python_engine_ready": true
+      "rollback_engine": null
     },
     "registered_tools": [
       {"name": "rag.retrieve"},
@@ -108,61 +80,3 @@ brew services start postgresql@18
 cd /Users/zhang/Downloads/chrome/IRIS-main/backend
 conda run -n iris pytest -q
 ```
-
-只验证双引擎对齐：
-
-```bash
-cd /Users/zhang/Downloads/chrome/IRIS-main/backend
-conda run -n iris pytest -q tests/test_workflow_engine_parity.py
-```
-
-只验证 Python Engine：
-
-```bash
-cd /Users/zhang/Downloads/chrome/IRIS-main/backend
-conda run -n iris pytest -q tests/test_python_workflow_engine.py tests/test_chat_workflow_engine_switch.py
-```
-
-## 当前差异
-
-`python` 引擎额外支持完整 route decision trace：
-
-```text
-__start__ -> planner/refiner
-planner -> researcher
-researcher -> writer/__end__
-writer -> reviewer
-reviewer -> planner/writer/__end__
-refiner -> __end__
-```
-
-这些决策会写入：
-
-```text
-workflow_route_decisions
-```
-
-LangGraph 路径目前仍保留为回滚通道，但 route decision trace 不如 Python Engine 完整。
-
-## 回滚条件
-
-出现以下情况时先回滚到 `langgraph`：
-
-- Python Engine SSE 顺序异常
-- workflow history 未入库
-- route decision trace 写入异常影响主链路
-- reviewer loop 出现非预期循环
-- chat 最终报告缺失
-
-回滚只需要改环境变量：
-
-```bash
-WORKFLOW_ENGINE=langgraph
-```
-
-## 后续替换路线
-
-1. 保持双引擎对齐测试持续通过
-2. 默认使用 `python`
-3. 增强 route decision 可视化/API
-4. 观察稳定后移除 LangGraph 依赖和 checkpoint 代码

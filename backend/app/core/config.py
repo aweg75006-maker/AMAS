@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     prompt_version: str = "prompt.v1"
     node_policy_version: str = "node-policy.v1"
     harness_manifest: str = "default_research.json"
-    workflow_engine: Literal["langgraph", "python"] = "python"
+    workflow_engine: Literal["langgraph"] = "langgraph"
 
     # ─── 集成 / 被动触发 (P3) ───
     feishu_webhook_url: Optional[str] = None
@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 50
     rag_top_k: int = 5
     rag_fetch_k: int = 20
+    rag_max_retrieval_iterations: int = 2
 
     upload_max_files: int = 5
     upload_max_file_size_bytes: int = 20 * 1024 * 1024

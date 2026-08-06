@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.rag.engine import get_retriever
+from app.rag.engine import get_candidate_documents, get_retriever
 from app.tools.registry import ToolContext, ToolRegistry, ToolSpec
-from app.tools.search import search_tavily
+from app.tools.search import search_tavily, search_tavily_candidates
 from app.utils.llm import get_llm
 
 
@@ -21,12 +21,32 @@ def register_research_tools(registry: ToolRegistry) -> None:
     )
     registry.register(
         ToolSpec(
+            name="rag.retrieve_candidates",
+            handler=_rag_retrieve_candidates,
+            description="Retrieve wide local knowledge-base candidates before global reranking.",
+            input_schema="query:string, knowledge_base_id:string",
+            output_schema="documents:list",
+            tags=("rag", "knowledge_base", "candidates"),
+        )
+    )
+    registry.register(
+        ToolSpec(
             name="rag.relevance_grade",
             handler=_rag_relevance_grade,
             description="Judge whether retrieved local documents are relevant.",
             input_schema="query:string, document_context:string",
             output_schema="grade:YES|NO",
             tags=("rag", "llm", "grader"),
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="web.retrieve_candidates",
+            handler=_web_retrieve_candidates,
+            description="Search the public web and preserve source metadata for global reranking.",
+            input_schema="query:string",
+            output_schema="candidates:list",
+            tags=("web", "search", "candidates"),
         )
     )
     registry.register(
@@ -64,6 +84,13 @@ def _rag_retrieve(payload: dict[str, Any], context: ToolContext):
     return retriever.invoke(query)
 
 
+def _rag_retrieve_candidates(payload: dict[str, Any], context: ToolContext):
+    return get_candidate_documents(
+        payload["query"],
+        knowledge_base_id=payload.get("knowledge_base_id", "kb_default"),
+    )
+
+
 def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> str:
     query = payload["query"]
     raw_context = payload.get("document_context", "")
@@ -94,6 +121,10 @@ def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> str:
 
 def _web_search(payload: dict[str, Any], context: ToolContext) -> str:
     return search_tavily(payload["query"])
+
+
+def _web_retrieve_candidates(payload: dict[str, Any], context: ToolContext) -> list[dict[str, object]]:
+    return search_tavily_candidates(payload["query"])
 
 
 def _delegate_to_connector(payload: dict[str, Any], context: ToolContext) -> str:

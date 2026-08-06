@@ -31,12 +31,12 @@ def test_safe_summary_masks_secrets():
     assert "workflow_engine" in summary
 
 
-def test_default_workflow_engine_is_python():
+def test_default_workflow_engine_is_langgraph():
     from app.core.config import Settings
 
     settings = Settings()
 
-    assert settings.workflow_engine == "python"
+    assert settings.workflow_engine == "langgraph"
 
 
 def test_missing_required_secrets_raise_configuration_error():
