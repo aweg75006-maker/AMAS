@@ -33,29 +33,28 @@ BUILTIN_EVAL_CASES: tuple[EvalCase, ...] = (
     ),
     EvalCase(
         case_id="agent_eval_rag_grounding",
-        query="企业知识库问答如何降低幻觉？",
+        query="本地知识库问答如何降低幻觉？",
         search_mode="document",
         expected_keywords=("知识库", "引用", "检索", "相关性", "拒答"),
         forbidden_terms=("编造", "随便"),
-        min_length=100,
+        min_length=90,
         min_citations=1,
         sample_output=(
-            "企业知识库问答应先做知识库检索，再进行相关性判断，并在答案中保留引用 [1]。"
+            "本地知识库问答应先做知识库检索，再进行相关性判断，并在答案中保留引用 [1]。"
             "当检索结果不足或相关性较低时，系统应拒答或提示需要更多资料，而不是自由发挥。"
-            "同时可以结合审计日志、检索 trace 和 Reviewer 节点降低幻觉风险。"
+            "同时可以用重排序和 Reviewer 节点检查证据覆盖度，降低幻觉风险。"
         ),
     ),
     EvalCase(
-        case_id="agent_eval_workflow_governance",
-        query="企业级 Agent 为什么需要工作流治理？",
-        expected_keywords=("trace", "权限", "审计", "超时", "取消"),
-        forbidden_terms=("不需要治理",),
-        min_length=100,
-        min_citations=0,
+        case_id="agent_eval_hybrid_rag",
+        query="本地知识库与全网搜索结果如何统一重排？",
+        expected_keywords=("候选池", "重排", "本地", "全网"),
+        forbidden_terms=("无法回答",),
+        min_length=90,
         sample_output=(
-            "企业级 Agent 需要工作流治理，因为任务执行必须可追踪 trace、可审计、可取消，"
-            "并且要具备超时和失败收口能力。权限控制能保证只有授权成员管理运行记录，"
-            "审计日志可以记录关键操作，帮助团队定位问题和复盘输出质量。"
+            "先将本地知识库和全网搜索结果归一化为同一个候选池，再由重排模型按问题"
+            "计算语义相关性。保留来源类型、链接和原始召回分数，最后选择排序靠前的"
+            "证据生成带引用的回答，并在证据不足时继续检索或明确说明局限。"
         ),
     ),
 )

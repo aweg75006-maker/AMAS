@@ -59,20 +59,6 @@ def register_research_tools(registry: ToolRegistry) -> None:
             tags=("web", "search"),
         )
     )
-    registry.register(
-        ToolSpec(
-            name="delegate_to_connector",
-            handler=_delegate_to_connector,
-            description=(
-                "把子问题委派给注册的第三方 Agent connector（如 internal_subagent "
-                "或外部 HTTP Agent 端点），回收结果用于研究。失败或 connector 不存在时"
-                "返回可读错误文本，不中断主流程。"
-            ),
-            input_schema="connector:string, prompt:string, system_prompt:string?",
-            output_schema="content:string",
-            tags=("agent", "connector", "delegation"),
-        )
-    )
 
 
 def _rag_retrieve(payload: dict[str, Any], context: ToolContext):
@@ -125,40 +111,3 @@ def _web_search(payload: dict[str, Any], context: ToolContext) -> str:
 
 def _web_retrieve_candidates(payload: dict[str, Any], context: ToolContext) -> list[dict[str, object]]:
     return search_tavily_candidates(payload["query"])
-
-
-def _delegate_to_connector(payload: dict[str, Any], context: ToolContext) -> str:
-    """工具层桥接：把子问题委派给 ConnectorRegistry 中的第三方 Agent。
-
-    用 ``connector.run(...)``（同步入口，内部独立线程跑事件循环）调用异步 Connector，
-    兼容工具运行时在线程中执行的既有模式。连接器返回的 ConnectorResult 失败时会
-    降级为可读错误文本，保证主研究流程不中断。
-    """
-    name = payload.get("connector") or payload.get("connector_name")
-    prompt = payload.get("prompt")
-    system_prompt = payload.get("system_prompt")
-    if not name or not prompt:
-        return "[delegate_to_connector] 需要 connector 名称与 prompt。"
-
-    from app.connectors.base import ConnectorContext
-    from app.connectors.registry import get_connector_registry
-
-    registry = get_connector_registry()
-    if not registry.has(name):
-        return (
-            f"[delegate_to_connector] 未找到 connector: {name}；"
-            f"已注册：{registry.names()}"
-        )
-
-    connector = registry.get(name)
-    result = connector.run(
-        prompt,
-        context=ConnectorContext(
-            node_name=context.node_name,
-            state=context.state,
-            session_id=str(context.state.get("session_id", "")),
-            request_id=str(context.state.get("request_id", "")),
-        ),
-        system_prompt=system_prompt,
-    )
-    return result.to_text()

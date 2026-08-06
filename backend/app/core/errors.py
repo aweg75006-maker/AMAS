@@ -6,9 +6,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.exceptions import AppError
-from app.core.identity import DEFAULT_TENANT_ID, DEFAULT_USER_ID, RequestContext, clean_context_id
 from app.core.logging import get_logger
-from app.services.workflow_trace_service import safe_record_error_event
 
 
 logger = get_logger("iris.errors")
@@ -33,14 +31,6 @@ def error_payload(
 
 def request_id_from(request: Request) -> str:
     return getattr(request.state, "request_id", "-")
-
-
-def context_from_request(request: Request) -> RequestContext:
-    return RequestContext(
-        tenant_id=clean_context_id(request.headers.get("X-Tenant-ID"), DEFAULT_TENANT_ID),
-        user_id=clean_context_id(request.headers.get("X-User-ID"), DEFAULT_USER_ID),
-        auth_source="headers",
-    )
 
 
 def json_error_response(
@@ -96,17 +86,6 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "details": exc.details,
             },
         )
-        await safe_record_error_event(
-            error_code=exc.code,
-            message=exc.message,
-            source="api",
-            severity="warning" if exc.status_code < 500 else "error",
-            context=context_from_request(request),
-            request_id=request_id,
-            path=str(request.url.path),
-            status_code=exc.status_code,
-            details=exc.details,
-        )
         return json_error_response(
             status_code=exc.status_code,
             code=exc.code,
@@ -132,16 +111,6 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "status_code": exc.status_code,
             },
         )
-        await safe_record_error_event(
-            error_code=code,
-            message=str(exc.detail),
-            source="api",
-            severity="warning" if exc.status_code < 500 else "error",
-            context=context_from_request(request),
-            request_id=request_id,
-            path=str(request.url.path),
-            status_code=exc.status_code,
-        )
         return json_error_response(
             status_code=exc.status_code,
             code=code,
@@ -159,17 +128,6 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "error_code": "VALIDATION_ERROR",
                 "status_code": 422,
             },
-        )
-        await safe_record_error_event(
-            error_code="VALIDATION_ERROR",
-            message="请求参数校验失败",
-            source="api",
-            severity="warning",
-            context=context_from_request(request),
-            request_id=request_id,
-            path=str(request.url.path),
-            status_code=422,
-            details={"errors": exc.errors()},
         )
         return json_error_response(
             status_code=422,
@@ -189,16 +147,6 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "error_code": "INTERNAL_ERROR",
                 "status_code": 500,
             },
-        )
-        await safe_record_error_event(
-            error_code="INTERNAL_ERROR",
-            message=str(exc),
-            source="api",
-            severity="error",
-            context=context_from_request(request),
-            request_id=request_id,
-            path=str(request.url.path),
-            status_code=500,
         )
         return json_error_response(
             status_code=500,

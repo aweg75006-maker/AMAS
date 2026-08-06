@@ -14,14 +14,7 @@ def test_safe_summary_masks_secrets():
     assert "123456" not in str(summary)
     assert "environment" in summary
     assert "total_token_budget" in summary
-    assert "postgres_configured" in summary
-    assert "postgres_auto_migrate" in summary
-    assert "postgres_dsn" not in summary
-    assert "seed_default_password" not in summary
-    assert "jwt_secret_key" not in summary
-    assert "jwt_secret_configured" in summary
     assert "rate_limit_enabled" in summary
-    assert "rate_limit_login_capacity" in summary
     assert "workflow_node_timeout_seconds" in summary
     assert "workflow_node_max_retries" in summary
     assert "workflow_version" in summary
@@ -29,8 +22,6 @@ def test_safe_summary_masks_secrets():
     assert "node_policy_version" in summary
     assert "harness_manifest" in summary
     assert "workflow_engine" in summary
-    assert "multi_tenant_enabled" in summary
-    assert "chat_history_backend" in summary
 
 
 def test_default_workflow_engine_is_langgraph():
@@ -39,8 +30,6 @@ def test_default_workflow_engine_is_langgraph():
     settings = Settings()
 
     assert settings.workflow_engine == "langgraph"
-    assert settings.multi_tenant_enabled is False
-    assert settings.chat_history_backend == "memory"
 
 
 def test_missing_required_secrets_raise_configuration_error():

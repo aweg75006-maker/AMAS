@@ -50,13 +50,6 @@
           "max_retries": 1,
           "input_schema": "query:string",
           "output_schema": "candidates:list"
-        },
-        {
-          "name": "delegate_to_connector",
-          "timeout_seconds": 90,
-          "max_retries": 1,
-          "input_schema": "connector:string, prompt:string, system_prompt:string?",
-          "output_schema": "content:string"
         }
       ]
     },

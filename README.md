@@ -202,14 +202,12 @@ docker compose up --build
 | 后端 API | [http://localhost:8000](http://localhost:8000) |
 | API 文档 | [http://localhost:8000/docs](http://localhost:8000/docs) |
 
-> 本地首次体验登录功能时，可在 `backend/.env` 中设置 `SEED_DEFAULT_USER_ENABLED=true`，并配置 `SEED_DEFAULT_USERNAME` 与 `SEED_DEFAULT_PASSWORD`。不要提交真实密钥或密码。
-
 ### 本地开发
 
 先启动基础服务：
 
 ```bash
-docker compose up -d redis postgres
+docker compose up -d redis
 ```
 
 启动后端：
@@ -241,11 +239,6 @@ npm run dev
 | `DASHSCOPE_API_KEY` | 是 | `text-embedding-v4` 文本向量化 |
 | `TAVILY_API_KEY` | Hybrid 模式需要 | 全网搜索 |
 | `WORKFLOW_ENGINE` | 否 | 固定使用 `langgraph` |
-| `MULTI_TENANT_ENABLED` | 否 | 默认 `false`，请求统一使用 `default` 租户 |
-| `CHAT_HISTORY_BACKEND` | 否 | 默认 `memory`；设为 `postgres` 启用持久化历史 |
-| `KNOWLEDGE_METADATA_BACKEND` | 否 | 默认 `redis`，可切换为 `postgres` |
-| `POSTGRES_DSN` | PostgreSQL 模式需要 | PostgreSQL 连接串 |
-| `JWT_SECRET_KEY` | 生产环境必需 | JWT 签名密钥 |
 | `TOTAL_TOKEN_BUDGET` | 否 | 默认 `128000` |
 
 更多 Docker 开发说明见 [docs/DOCKER_DEV.md](docs/DOCKER_DEV.md)，工作流引擎发布与回滚说明见 [docs/WORKFLOW_ENGINE_ROLLOUT.md](docs/WORKFLOW_ENGINE_ROLLOUT.md)。
@@ -258,14 +251,13 @@ npm run dev
 AMAS/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # FastAPI 路由、认证与 SSE 流式接口
+│   │   ├── api/            # FastAPI 路由与 SSE 流式接口
 │   │   ├── graph/          # 工作流引擎、Agent 节点与路由策略
 │   │   ├── harness/        # 工作流清单、Prompt 与版本管理
 │   │   ├── tools/          # Tool Registry 与 Tool Runtime
 │   │   ├── rag/            # PDF 解析、ChromaDB 与语义检索
 │   │   ├── repositories/   # 数据访问层
-│   │   └── services/       # 账户、知识库、审计与工作流服务
-│   ├── migrations/         # Alembic 数据库迁移
+│   │   └── services/       # 会话、知识库与运行时服务
 │   └── tests/              # 后端测试
 ├── frontend/
 │   └── src/                # Vue 页面、组件与 API 服务

@@ -12,7 +12,7 @@ logger = get_logger("iris.api.health")
 @router.get("/health")
 async def health_endpoint():
     metadata = {
-        "backend": settings.knowledge_metadata_backend,
+        "backend": "redis",
         "status": "unknown",
     }
 

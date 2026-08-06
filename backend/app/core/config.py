@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,24 +48,7 @@ class Settings(BaseSettings):
     redis_turn_full_ttl: int = 259_200
     redis_checkpoint_ttl: int = 604_800
 
-    knowledge_metadata_backend: Literal["redis", "postgres"] = "redis"
-    chat_history_backend: Literal["memory", "postgres"] = "memory"
-    postgres_dsn: Optional[SecretStr] = None
-    postgres_auto_migrate: bool = True
-
-    multi_tenant_enabled: bool = False
-
-    seed_default_user_enabled: bool = False
-    seed_default_tenant_name: str = "默认租户"
-    seed_default_username: Optional[str] = None
-    seed_default_password: Optional[SecretStr] = None
-
-    jwt_secret_key: Optional[SecretStr] = None
-    jwt_access_token_ttl_seconds: int = 86_400
-
     rate_limit_enabled: bool = True
-    rate_limit_login_capacity: int = 5
-    rate_limit_login_refill_per_second: float = 1 / 60
     rate_limit_chat_capacity: int = 20
     rate_limit_chat_refill_per_second: float = 1 / 15
     rate_limit_upload_capacity: int = 10
@@ -82,19 +65,6 @@ class Settings(BaseSettings):
     node_policy_version: str = "node-policy.v1"
     harness_manifest: str = "default_research.json"
     workflow_engine: Literal["langgraph"] = "langgraph"
-
-    # ─── 集成 / 被动触发 (P3) ───
-    feishu_webhook_url: Optional[str] = None
-    webhook_trigger_token: Optional[str] = None
-    cron_enabled: bool = False
-    cron_poll_interval_seconds: float = 30.0
-    # 通过环境变量 CRON_JOBS 注入 JSON 数组，作为启动时预置的定时任务。
-    cron_jobs: list[dict[str, Any]] = []
-    # ─── 第三方 Agent Connector (P5) ───
-    # 通过环境变量 CONNECTORS 注入 JSON 数组，注册第三方 Agent connector 端点，
-    # 例如：[{"name":"my_agent","type":"http_agent","config":{"base_url":"https://...",
-    # "api_key":"...","model":"gpt-4o-mini"}}, ...]
-    connectors: list[dict[str, Any]] = []
 
     total_token_budget: int = 128_000
 
@@ -151,16 +121,7 @@ class Settings(BaseSettings):
             "app_port": self.app_port,
             "redis_enabled": self.redis_enabled,
             "redis_url": self.redis_url,
-            "knowledge_metadata_backend": self.knowledge_metadata_backend,
-            "postgres_configured": bool(self.postgres_dsn),
-            "postgres_auto_migrate": self.postgres_auto_migrate,
-            "seed_default_user_enabled": self.seed_default_user_enabled,
-            "seed_default_username_configured": bool(self.seed_default_username),
-            "seed_default_password_configured": bool(self.seed_default_password),
-            "jwt_secret_configured": bool(self.jwt_secret_key),
-            "jwt_access_token_ttl_seconds": self.jwt_access_token_ttl_seconds,
             "rate_limit_enabled": self.rate_limit_enabled,
-            "rate_limit_login_capacity": self.rate_limit_login_capacity,
             "rate_limit_chat_capacity": self.rate_limit_chat_capacity,
             "rate_limit_upload_capacity": self.rate_limit_upload_capacity,
             "workflow_node_timeout_seconds": self.workflow_node_timeout_seconds,
@@ -174,13 +135,6 @@ class Settings(BaseSettings):
             "node_policy_version": self.node_policy_version,
             "harness_manifest": self.harness_manifest,
             "workflow_engine": self.workflow_engine,
-            "multi_tenant_enabled": self.multi_tenant_enabled,
-            "chat_history_backend": self.chat_history_backend,
-            "feishu_configured": bool(self.feishu_webhook_url),
-            "webhook_trigger_configured": bool(self.webhook_trigger_token),
-            "cron_enabled": self.cron_enabled,
-            "cron_poll_interval_seconds": self.cron_poll_interval_seconds,
-            "connectors_configured": bool(self.connectors),
             "llm_fast_model": self.llm_fast_model,
             "llm_smart_model": self.llm_smart_model,
             "dashscope_configured": bool(self.dashscope_api_key),
@@ -192,15 +146,6 @@ class Settings(BaseSettings):
             "upload_max_file_size_bytes": self.upload_max_file_size_bytes,
             "upload_allowed_extensions": self.upload_allowed_extensions,
         }
-
-    def jwt_secret(self) -> str:
-        value = self.secret_value(self.jwt_secret_key)
-        if value:
-            return value
-        if self.environment == "prod":
-            raise ConfigurationError("生产环境必须配置 JWT_SECRET_KEY。")
-        return "local-dev-insecure-jwt-secret"
-
 
 @lru_cache
 def get_settings() -> Settings:

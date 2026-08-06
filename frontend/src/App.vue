@@ -18,53 +18,6 @@
         <div class="absolute bottom-[-20%] left-[20%] w-[40%] h-[40%] bg-indigo-300/30 rounded-full blur-[120px] mix-blend-multiply animate-blob animation-delay-4000"></div>
     </div>
 
-    <div v-if="!isAuthenticated" class="min-h-screen flex items-center justify-center px-6">
-      <div class="w-full max-w-sm bg-white/90 backdrop-blur-xl border border-white/50 rounded-2xl shadow-2xl p-7">
-        <div class="flex items-center gap-3 mb-7">
-          <div class="w-10 h-10 flex items-center justify-center bg-gradient-to-tr from-blue-600 to-purple-600 rounded-xl shadow-lg shadow-blue-500/20 text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-          </div>
-          <div>
-            <h1 class="text-2xl font-black tracking-tighter bg-gradient-to-r from-blue-700 via-purple-600 to-indigo-600 bg-clip-text text-transparent" style="font-family: 'Orbitron', sans-serif;">AMAS</h1>
-            <p class="text-[10px] font-semibold text-gray-500 tracking-[0.05em] uppercase -mt-1">Secure Access</p>
-          </div>
-        </div>
-
-        <form class="space-y-4" @submit.prevent="handleLogin">
-          <div>
-            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Username</label>
-            <input
-              v-model="loginUsername"
-              autocomplete="username"
-              class="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-              :disabled="loginLoading"
-            />
-          </div>
-          <div>
-            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Password</label>
-            <input
-              v-model="loginPassword"
-              type="password"
-              autocomplete="current-password"
-              class="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-              :disabled="loginLoading"
-            />
-          </div>
-          <div v-if="loginError" class="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">
-            {{ loginError }}
-          </div>
-          <button
-            type="submit"
-            :disabled="loginLoading || !loginUsername || !loginPassword"
-            class="w-full rounded-xl bg-gray-900 px-4 py-3 text-xs font-bold uppercase tracking-wide text-white shadow-lg transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {{ loginLoading ? 'Signing in...' : 'Sign in' }}
-          </button>
-        </form>
-      </div>
-    </div>
-
-    <template v-else>
     <header class="sticky top-0 z-50 border-b border-white/20 bg-white/70 backdrop-blur-xl">
       <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -90,23 +43,12 @@
           <div class="hidden sm:block text-[10px] text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded">
             {{ sessionId ? sessionId.substring(0, 12) + '...' : '...' }}
           </div>
-          <div class="hidden md:flex flex-col items-end leading-tight">
-            <span class="text-[10px] font-bold text-gray-600">{{ currentUser?.username || 'signed in' }}</span>
-            <span class="text-[10px] text-gray-400">{{ currentUser?.role || 'member' }}</span>
-          </div>
           <button
             @click="handleNewSession"
             class="px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors uppercase tracking-wide"
             title="Start new research session"
           >
             + New
-          </button>
-          <button
-            @click="handleLogout"
-            class="px-3 py-1.5 text-[10px] font-bold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors uppercase tracking-wide"
-            title="Sign out"
-          >
-            Sign out
           </button>
         </div>
       </div>
@@ -125,22 +67,21 @@
                 </div>
                 
                 <div 
-                    @dragover.prevent="canManageKnowledge && (isDragging = true)"
+                    @dragover.prevent="isDragging = true"
                     @dragleave.prevent="isDragging = false"
                     @drop.prevent="handleDrop"
                     class="relative group cursor-pointer border-2 border-dashed rounded-xl p-4 transition-all duration-300 flex flex-col items-center justify-center text-center min-h-[100px]"
                     :class="[
                         isDragging ? 'border-blue-500 bg-blue-50/50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50/50',
-                        !canManageKnowledge ? 'opacity-60 cursor-not-allowed' : ''
                     ]"
                 >
-                    <input type="file" multiple accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" :disabled="!canManageKnowledge" @change="handleFileSelect" />
+                    <input type="file" multiple accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" @change="handleFileSelect" />
                     
                     <div v-if="uploadedFiles.length === 0" class="pointer-events-none flex flex-col items-center">
                         <div class="w-8 h-8 mb-2 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                         </div>
-                        <p class="text-xs text-gray-500 font-medium">{{ canManageKnowledge ? 'Drop PDFs here' : 'Read-only role' }}</p>
+                        <p class="text-xs text-gray-500 font-medium">Drop PDFs here</p>
                     </div>
 
                     <div v-else class="w-full space-y-2 pointer-events-none z-10">
@@ -334,13 +275,12 @@
       </div>
 
     </main>
-    </template>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue';
-import { uploadFiles, streamChat, clearContext, getOrCreateSessionId, getCurrentSessionId, clearSession, getSessionInfo, listKnowledgeBases, listKnowledgeBaseDocuments, login as apiLogin, logout as apiLogout, hasAuthToken } from './services/api';
+import { uploadFiles, streamChat, clearContext, getOrCreateSessionId, getCurrentSessionId, clearSession, getSessionInfo, listKnowledgeBases, listKnowledgeBaseDocuments } from './services/api';
 import StatusFlow from './components/StatusFlow.vue';
 import MarkdownIt from 'markdown-it';
 // 【修复步骤 1】引入数学公式插件 (必须先 npm install markdown-it-katex)
@@ -380,21 +320,6 @@ const activeKnowledgeBase = ref(null);
 const activeKnowledgeBaseId = ref('kb_default');
 const knowledgeLoading = ref(false);
 const knowledgeError = ref('');
-const isAuthenticated = ref(hasAuthToken());
-const loginUsername = ref('');
-const loginPassword = ref('');
-const loginLoading = ref(false);
-const loginError = ref('');
-const currentUser = ref(null);
-if (isAuthenticated.value) {
-    currentUser.value = {
-        user_id: localStorage.getItem('iris_user_id') || '',
-        username: localStorage.getItem('iris_username') || '',
-        role: localStorage.getItem('iris_role') || '',
-        tenant_id: localStorage.getItem('iris_tenant_id') || '',
-    };
-}
-const canManageKnowledge = computed(() => ['owner', 'admin'].includes(currentUser.value?.role));
 
 // 打字机变量
 const displayedReport = ref('');
@@ -414,47 +339,7 @@ async function initializeApp() {
 }
 
 // 页面加载时初始化会话
-onMounted(async () => {
-  if (isAuthenticated.value) {
-    await initializeApp();
-  }
-});
-
-async function handleLogin() {
-    loginLoading.value = true;
-    loginError.value = '';
-    try {
-        const data = await apiLogin(loginUsername.value, loginPassword.value);
-        currentUser.value = {
-            ...(data.user || {}),
-            role: data.role,
-            tenant_id: data.active_tenant_id,
-        };
-        isAuthenticated.value = true;
-        loginPassword.value = '';
-        logs.value = [];
-        await initializeApp();
-    } catch (e) {
-        loginError.value = e.message || 'Login failed';
-    } finally {
-        loginLoading.value = false;
-    }
-}
-
-async function handleLogout() {
-    apiLogout();
-    await clearSession();
-    isAuthenticated.value = false;
-    currentUser.value = null;
-    sessionId.value = null;
-    sessionTurnCount.value = 0;
-    sessionHistory.value = null;
-    knowledgeBases.value = [];
-    knowledgeDocuments.value = [];
-    activeKnowledgeBase.value = null;
-    displayedReport.value = '';
-    logs.value = [];
-}
+onMounted(initializeApp);
 
 async function refreshKnowledgePanel() {
     knowledgeLoading.value = true;
@@ -545,20 +430,11 @@ const scrollToBottom = async () => {
 
 // --- 文件处理逻辑 ---
 const handleFileSelect = async (event) => {
-    if (!canManageKnowledge.value) {
-        triggerWarning('当前角色没有上传知识库文档的权限');
-        event.target.value = '';
-        return;
-    }
     processFiles(event.target.files);
 };
 
 const handleDrop = async (event) => {
     isDragging.value = false;
-    if (!canManageKnowledge.value) {
-        triggerWarning('当前角色没有上传知识库文档的权限');
-        return;
-    }
     processFiles(event.dataTransfer.files);
 };
 
@@ -625,23 +501,16 @@ const startResearch = async () => {
 
     try {
         if (uploadedFiles.value.length > 0) {
-            if (!canManageKnowledge.value) {
-                throw new Error('当前角色没有上传知识库文档的权限');
-            }
             logs.value.push(`[SYSTEM] Uploading ${uploadedFiles.value.length} document(s)...`);
             const res = await uploadFiles(uploadedFiles.value, activeKnowledgeBaseId.value);
             logs.value.push(`[SYSTEM] Knowledge base built. ${res.chunks_stored} chunks indexed.`);
             activeKnowledgeBaseId.value = res.knowledge_base_id || activeKnowledgeBaseId.value;
             await refreshKnowledgePanel();
         } else {
-            if (!canManageKnowledge.value) {
-                logs.value.push(`[SYSTEM] Read-only role. Skipping knowledge base reset.`);
-            } else {
-                logs.value.push(`[SYSTEM] Clearing previous knowledge base...`);
-                await clearContext(activeKnowledgeBaseId.value);
-                await refreshKnowledgePanel();
-                logs.value.push(`[SYSTEM] Context cleared. Running in pure Web Search mode.`);
-            }
+            logs.value.push(`[SYSTEM] Clearing previous knowledge base...`);
+            await clearContext(activeKnowledgeBaseId.value);
+            await refreshKnowledgePanel();
+            logs.value.push(`[SYSTEM] Context cleared. Running in pure Web Search mode.`);
         }
 
         streamChat(

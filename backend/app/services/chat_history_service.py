@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 
-from app.core.identity import RequestContext
 from app.core.logging import get_logger
 from app.models.domain import (
     ChatSessionRecord,
@@ -32,7 +31,6 @@ class ChatHistoryService:
         *,
         session_meta: SessionMeta,
         turn_record: TurnRecord,
-        context: RequestContext,
         knowledge_base_id: str,
         snapshot: BudgetSnapshot,
     ) -> tuple[ChatSessionRecord, ChatTurnRecord]:
@@ -40,9 +38,6 @@ class ChatHistoryService:
         title = self._title_from_query(turn_record.query)
         session = ChatSessionRecord(
             session_id=session_meta.session_id,
-            tenant_id=context.tenant_id,
-            user_id=context.user_id,
-            username=context.username,
             knowledge_base_id=knowledge_base_id,
             title=title,
             status=ChatSessionStatus.ACTIVE.value,
@@ -58,9 +53,6 @@ class ChatHistoryService:
         turn = ChatTurnRecord(
             turn_id=turn_record.turn_id,
             session_id=session_meta.session_id,
-            tenant_id=context.tenant_id,
-            user_id=context.user_id,
-            username=context.username,
             knowledge_base_id=knowledge_base_id,
             turn_number=turn_record.turn_number,
             query=turn_record.query,
@@ -80,26 +72,21 @@ class ChatHistoryService:
     async def list_sessions(
         self,
         *,
-        tenant_id: str,
-        user_id: str | None = None,
         limit: int = 50,
     ) -> list[ChatSessionRecord]:
         safe_limit = max(1, min(limit, 200))
         return await self.repository.list_sessions(
-            tenant_id,
-            user_id=user_id,
             limit=safe_limit,
         )
 
     async def get_session_with_turns(
         self,
         *,
-        tenant_id: str,
         session_id: str,
         limit: int = 50,
     ) -> tuple[ChatSessionRecord, list[ChatTurnRecord]] | None:
         session = await self.repository.get_session(session_id)
-        if session is None or session.tenant_id != tenant_id:
+        if session is None:
             return None
         turns = await self.repository.list_turns(
             session_id,

@@ -1,6 +1,5 @@
 import pytest
 
-from app.models.domain import KnowledgeBaseVisibility
 from app.services.knowledge_base_service import (
     DEFAULT_KNOWLEDGE_BASE_ID,
     KnowledgeBaseService,
@@ -27,23 +26,6 @@ async def test_default_knowledge_base_is_idempotent():
 
 
 @pytest.mark.asyncio
-async def test_default_knowledge_base_is_tenant_scoped():
-    redis = RedisClient(url="redis://localhost:1/0")
-    await redis.connect()
-    try:
-        service = KnowledgeBaseService(RedisKnowledgeBaseRepository(redis))
-
-        default_kb = await service.ensure_default_knowledge_base()
-        tenant_kb = await service.ensure_default_knowledge_base(tenant_id="tenant_a")
-
-        assert default_kb.knowledge_base_id == DEFAULT_KNOWLEDGE_BASE_ID
-        assert tenant_kb.knowledge_base_id == "kb_default_tenant_a"
-        assert tenant_kb.tenant_id == "tenant_a"
-    finally:
-        await redis.close()
-
-
-@pytest.mark.asyncio
 async def test_create_and_list_knowledge_bases():
     redis = RedisClient(url="redis://localhost:1/0")
     await redis.connect()
@@ -52,36 +34,11 @@ async def test_create_and_list_knowledge_bases():
 
         created = await service.create_knowledge_base(
             name="研发资料",
-            visibility=KnowledgeBaseVisibility.TEAM.value,
         )
         bases = await service.list_knowledge_bases()
 
         assert any(kb.knowledge_base_id == created.knowledge_base_id for kb in bases)
         assert any(kb.knowledge_base_id == DEFAULT_KNOWLEDGE_BASE_ID for kb in bases)
-    finally:
-        await redis.close()
-
-
-@pytest.mark.asyncio
-async def test_tenant_scoped_lookup_hides_other_tenant_knowledge_base():
-    redis = RedisClient(url="redis://localhost:1/0")
-    await redis.connect()
-    try:
-        service = KnowledgeBaseService(RedisKnowledgeBaseRepository(redis))
-
-        created = await service.create_knowledge_base(
-            name="租户 A 资料",
-            tenant_id="tenant_a",
-        )
-
-        assert await service.get_knowledge_base_for_tenant(
-            created.knowledge_base_id,
-            "tenant_a",
-        )
-        assert await service.get_knowledge_base_for_tenant(
-            created.knowledge_base_id,
-            "tenant_b",
-        ) is None
     finally:
         await redis.close()
 

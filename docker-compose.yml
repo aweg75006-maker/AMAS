@@ -13,23 +13,6 @@ services:
       timeout: 3s
       retries: 5
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: amas-postgres
-    environment:
-      POSTGRES_DB: amas
-      POSTGRES_USER: amas
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U amas -d amas"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
   backend:
     build:
       context: ./backend
@@ -42,8 +25,6 @@ services:
       APP_PORT: 8000
       APP_RELOAD: "true"
       REDIS_URL: redis://redis:6379/0
-      KNOWLEDGE_METADATA_BACKEND: ${KNOWLEDGE_METADATA_BACKEND:-redis}
-      POSTGRES_DSN: postgresql://amas:${POSTGRES_PASSWORD:-change-me}@postgres:5432/amas
       CORS_ALLOW_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
     ports:
       - "8000:8000"
@@ -54,8 +35,6 @@ services:
       - backend-uploads:/app/app/rag/uploads
     depends_on:
       redis:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
 
   frontend:
@@ -72,7 +51,6 @@ services:
 
 volumes:
   redis-data:
-  postgres-data:
   backend-chroma:
   backend-turn-chroma:
   backend-uploads:

@@ -3,15 +3,11 @@ from typing import List
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
-from app.api.context import RequestContext, get_request_context
-from app.api.permissions import require_write_access
 from app.api.rate_limits import upload_rate_limit
 from app.api.schemas import CreateKnowledgeBaseRequest
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
-from app.models.domain import AuditAction
 from app.rag.engine import get_upload_dir, process_documents, reset_knowledge_base
-from app.services.audit_service import record_audit_event_for_context
 from app.services.knowledge_base_service import get_knowledge_base_service
 from app.services.upload_security import save_upload_batch, validate_upload_files
 
@@ -21,18 +17,15 @@ logger = get_logger("iris.api.knowledge")
 
 
 @router.get("/knowledge-bases")
-async def list_knowledge_bases(
-    context: RequestContext = Depends(get_request_context),
-):
+async def list_knowledge_bases():
     service = await get_knowledge_base_service()
-    bases = await service.list_knowledge_bases(tenant_id=context.tenant_id)
+    bases = await service.list_knowledge_bases()
     return {"items": [kb.to_dict() for kb in bases]}
 
 
 @router.post("/knowledge-bases")
 async def create_knowledge_base(
     request: CreateKnowledgeBaseRequest,
-    context: RequestContext = Depends(require_write_access),
 ):
     if not request.name.strip():
         raise AppError(
@@ -45,19 +38,7 @@ async def create_knowledge_base(
     kb = await service.create_knowledge_base(
         name=request.name.strip(),
         description=request.description,
-        tenant_id=context.tenant_id,
         visibility=request.visibility,
-        created_by=context.user_id,
-    )
-    await record_audit_event_for_context(
-        context,
-        action=AuditAction.KNOWLEDGE_BASE_CREATED.value,
-        target_type="knowledge_base",
-        target_id=kb.knowledge_base_id,
-        details={
-            "name": kb.name,
-            "visibility": kb.visibility,
-        },
     )
     return kb.to_dict()
 
@@ -65,13 +46,9 @@ async def create_knowledge_base(
 @router.get("/knowledge-bases/{knowledge_base_id}/documents")
 async def list_knowledge_base_documents(
     knowledge_base_id: str,
-    context: RequestContext = Depends(get_request_context),
 ):
     service = await get_knowledge_base_service()
-    kb = await service.get_knowledge_base_for_tenant(
-        knowledge_base_id,
-        context.tenant_id,
-    )
+    kb = await service.get_knowledge_base(knowledge_base_id)
     if kb is None:
         raise AppError(
             code="KNOWLEDGE_BASE_NOT_FOUND",
@@ -87,15 +64,11 @@ async def list_knowledge_base_documents(
 @router.post("/clear")
 async def clear_endpoint(
     knowledge_base_id: str | None = Query(default=None),
-    context: RequestContext = Depends(require_write_access),
 ):
     try:
         service = await get_knowledge_base_service()
         if knowledge_base_id:
-            kb = await service.get_knowledge_base_for_tenant(
-                knowledge_base_id,
-                context.tenant_id,
-            )
+            kb = await service.get_knowledge_base(knowledge_base_id)
             if kb is None:
                 raise AppError(
                     code="KNOWLEDGE_BASE_NOT_FOUND",
@@ -104,19 +77,9 @@ async def clear_endpoint(
                     details={"knowledge_base_id": knowledge_base_id},
                 )
         else:
-            kb = await service.ensure_default_knowledge_base(
-                tenant_id=context.tenant_id,
-                created_by=context.user_id,
-            )
+            kb = await service.ensure_default_knowledge_base()
         await service.clear_documents(kb.knowledge_base_id)
         reset_knowledge_base(kb.knowledge_base_id)
-        await record_audit_event_for_context(
-            context,
-            action=AuditAction.KNOWLEDGE_BASE_CLEARED.value,
-            target_type="knowledge_base",
-            target_id=kb.knowledge_base_id,
-            details={"knowledge_base_id": kb.knowledge_base_id},
-        )
         return {
             "message": "知识库已重置",
             "status": "success",
@@ -139,17 +102,13 @@ async def upload_files(
     files: List[UploadFile] = File(...),
     knowledge_base_id: str | None = Form(default=None),
     _rate_limit: None = Depends(upload_rate_limit),
-    context: RequestContext = Depends(require_write_access),
 ):
     """Upload documents into the current knowledge base."""
     try:
         validate_upload_files(files)
         service = await get_knowledge_base_service()
         if knowledge_base_id:
-            kb = await service.get_knowledge_base_for_tenant(
-                knowledge_base_id,
-                context.tenant_id,
-            )
+            kb = await service.get_knowledge_base(knowledge_base_id)
             if kb is None:
                 raise AppError(
                     code="KNOWLEDGE_BASE_NOT_FOUND",
@@ -158,10 +117,7 @@ async def upload_files(
                     details={"knowledge_base_id": knowledge_base_id},
                 )
         else:
-            kb = await service.ensure_default_knowledge_base(
-                tenant_id=context.tenant_id,
-                created_by=context.user_id,
-            )
+            kb = await service.ensure_default_knowledge_base()
         await service.clear_documents(kb.knowledge_base_id)
         reset_knowledge_base(kb.knowledge_base_id)
 
@@ -180,23 +136,9 @@ async def upload_files(
                 size_bytes=stat.st_size,
                 storage_path=saved_path,
                 chunk_count=chunk_count_per_file,
-                tenant_id=context.tenant_id,
-                created_by=context.user_id,
             )
             documents.append(document.to_dict())
 
-        await record_audit_event_for_context(
-            context,
-            action=AuditAction.DOCUMENTS_UPLOADED.value,
-            target_type="knowledge_base",
-            target_id=kb.knowledge_base_id,
-            details={
-                "knowledge_base_id": kb.knowledge_base_id,
-                "file_count": len(files),
-                "chunks_stored": chunks_num,
-                "document_ids": [document["document_id"] for document in documents],
-            },
-        )
         return {
             "status": "success",
             "knowledge_base_id": kb.knowledge_base_id,

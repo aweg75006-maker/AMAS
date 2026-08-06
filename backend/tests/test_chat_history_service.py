@@ -1,7 +1,6 @@
 import pytest
 from uuid import uuid4
 
-from app.core.identity import RequestContext
 from app.models.domain import SessionMeta, TurnRecord
 from app.repositories.chat_history_repository import InMemoryChatHistoryRepository
 from app.services.chat_history_service import ChatHistoryService
@@ -37,22 +36,11 @@ async def test_chat_history_service_persists_completed_turn_in_memory():
     await service.persist_completed_turn(
         session_meta=session_meta,
         turn_record=turn_record,
-        context=RequestContext(
-            tenant_id="default",
-            user_id="user_history",
-            username="history",
-            role="member",
-            auth_source="jwt",
-        ),
         knowledge_base_id="kb_history",
         snapshot=snapshot,
     )
-    sessions = await service.list_sessions(
-        tenant_id="default",
-        user_id="user_history",
-    )
+    sessions = await service.list_sessions()
     result = await service.get_session_with_turns(
-        tenant_id="default",
         session_id=session_id,
     )
 

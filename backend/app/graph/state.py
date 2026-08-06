@@ -97,11 +97,7 @@ class AgentState(TypedDict, total=False):
     session_id: str                 # 持久化会话 ID（服务端生成）
     turn_id: str                    # 当前 Turn 的唯一标识
     turn_number: int                # 会话内第几个 Turn
-    tenant_id: str                  # 当前租户 ID
-    user_id: str                    # 当前用户 ID
-    username: str                   # 当前用户名
     request_id: str                 # 当前请求 ID
-    workflow_run_id: str            # 当前工作流执行 ID
 
     # 分层记忆
     episodic_memory: List[TurnRecordDict]     # 最近 K 个 Turn（完整记录）
