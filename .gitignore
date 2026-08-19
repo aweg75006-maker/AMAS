@@ -5,9 +5,15 @@ __pycache__/
 .env
 .DS_Store
 .idea/
+.vscode/
+.claude/
+.codegraph/
+.mimocode/
+.workbuddy/
 *.db
 backend/app/api/checkpoints.db
 backend/app/rag/chroma_db/
+backend/app/rag/reranker_model/
 
 # 只保留根目录 README.md，忽略其他所有 md 文件
 *.md
