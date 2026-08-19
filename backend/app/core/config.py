@@ -72,11 +72,20 @@ class Settings(BaseSettings):
     rag_upload_dir: Path = Field(default=APP_DIR / "rag" / "uploads")
     rag_embedding_model: str = "text-embedding-v4"
     rag_reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # 重排序模型的固定本地路径：首次会从 HuggingFace 下载到此目录（见 backend/app/rag/reranker_model），
+    # 之后默认直接从这里加载，避免每次运行都触发 HuggingFace 下载/校验。
+    rag_reranker_local_path: Path = Field(
+        default=APP_DIR / "rag" / "reranker_model" / "ms-marco-MiniLM-L-6-v2"
+    )
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 50
     rag_top_k: int = 5
     rag_fetch_k: int = 20
     rag_max_retrieval_iterations: int = 2
+    # BM25 关键词稀疏召回（移植自 hybrid-rag-graph-master）：作为稠密向量召回的补充通道，
+    # 补专名 / 编号 / 术语等字面匹配的召回盲区。关闭后仅保留稠密向量召回。
+    rag_bm25_enabled: bool = True
+    rag_bm25_top_k: int = 20
 
     upload_max_files: int = 5
     upload_max_file_size_bytes: int = 20 * 1024 * 1024

@@ -25,6 +25,7 @@ from app.utils.budget_ledger import (
     DEFAULT_NODE_POLICIES,
 )
 from app.utils.token_counter import count_tokens
+from app.utils.text_sanitize import strip_surrogates
 
 logger = logging.getLogger("iris.budget")
 
@@ -349,13 +350,30 @@ class BudgetEnforcer:
         Returns:
             (llm_response, enforcer_result)
         """
-        # 1. 预检
+        # 1. 入口清洗：剥离开场 prompt 里可能混入的孤立代理字符。
+        #    （用户输入/检索结果里的脏字符会让 openai SDK 在序列化请求体时
+        #      抛 UnicodeEncodeError: surrogates not allowed，且重试必然失败）
+        input_text = strip_surrogates(input_text)
+
+        # 2. 预检
         processed_text, result = self.pre_check(node_name, input_text, state)
 
-        # 2. LLM 调用
+        # 3. LLM 调用
         response = llm.invoke(processed_text)
 
-        # 3. 记录
+        # 4. 出口清洗：LLM 偶尔会返回含孤立代理字符的内容，
+        #    不剥掉的话会随 state 流入下游（json.dumps / sha256 等编码点全都会炸）
+        _content = getattr(response, "content", None)
+        if isinstance(_content, str):
+            _cleaned = strip_surrogates(_content)
+            if _cleaned is not _content:  # 快速路径下干净文本返回原对象
+                try:
+                    response.content = _cleaned
+                except Exception:
+                    # 消息对象不可写时忽略（下游消费点各自还有兜底清洗）
+                    pass
+
+        # 5. 记录
         actual_input = 0
         actual_output = 0
         if hasattr(response, "usage_metadata") and response.usage_metadata:
