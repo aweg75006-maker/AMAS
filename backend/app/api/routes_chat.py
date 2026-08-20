@@ -203,6 +203,15 @@ async def _chat_event_stream(
             workflow_input or initial_state,
             config,
         ):
+            if "__custom__" in event:
+                custom_event = event["__custom__"]
+                if custom_event.get("kind") == "research_progress":
+                    data = json.dumps(
+                        {"step": "__research_progress__", "data": custom_event},
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {data}\n\n"
+                continue
             if "__interrupt__" in event:
                 for interrupt_event in event["__interrupt__"]:
                     pause_data = getattr(interrupt_event, "value", interrupt_event)

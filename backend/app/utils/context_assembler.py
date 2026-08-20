@@ -140,6 +140,21 @@ class ContextAssembler:
             query=query, top_k=3
         )
 
+        # 5.1 记忆补充检索：向量未命中或结果不足时，从图谱 / 冷层归档补齐
+        # （结构化知识如"用户偏好/关系"走图谱，长尾历史走冷层关键词，命中即升温）
+        extra_memory_text = ""
+        try:
+            from app.utils.memory.search import get_memory_search
+            extras = await get_memory_search().search(
+                query, thread_id=session.session_id, top_k=3, redis=self._redis
+            )
+            if extras:
+                parts = ["## 补充记忆（图谱 / 归档）"]
+                parts.extend(f"- {e['content'][:150]}" for e in extras)
+                extra_memory_text = "\n".join(parts)
+        except Exception:
+            extra_memory_text = ""
+
         # 6. Phase 3: 加载知识融合文本
         knowledge_fusion = ""
         if self._redis:
@@ -150,10 +165,16 @@ class ContextAssembler:
                 knowledge_fusion = fusion_text
 
         # 7. Phase 3: 构建增强版 memory_context
-        # 融合三层记忆：滑动窗口 + 语义检索 + 知识融合
+        # 融合三层记忆：滑动窗口 + 语义检索 + 知识融合（+ 补充记忆）
+        retrieval_context = retrieval_result.context_text
+        if extra_memory_text:
+            retrieval_context = (
+                (retrieval_context + "\n\n" + extra_memory_text)
+                if retrieval_context else extra_memory_text
+            )
         enriched_context = self._build_enriched_context(
             sliding_window_context=memory.memory_context,
-            retrieval_context=retrieval_result.context_text,
+            retrieval_context=retrieval_context,
             knowledge_fusion=knowledge_fusion,
         )
 
@@ -310,6 +331,14 @@ class ContextAssembler:
                 asyncio.create_task(
                     self.scheduler.schedule(session_id, all_turns, window_k)
                 )
+
+            # 6.1 记忆系统：异步触发结构化知识抽取（带回合数门槛 + 冷却，
+            #     不会每回合都调 LLM，失败静默不影响主流程）
+            try:
+                from app.utils.memory.extraction import get_extractor
+                asyncio.create_task(get_extractor().consolidate_thread(session_id))
+            except Exception:
+                pass
 
         except Exception as e:
             import logging

@@ -1,3 +1,15 @@
+"""研究类工具集：RAG 检索与网络搜索的统一封装。
+
+本模块把"检索能力"注册成可供图节点调用的工具：
+- rag.retrieve_candidates   : 本地知识库广召回（稠密向量 + BM25 双通道），供全局重排前取候选；
+- rag.retrieve              : 本地知识库直接检索（按 query 返回文档）；
+- rag.relevance_grade       : LLM 证据评估——判断证据是否充分、缺什么、建议补搜关键词；
+- web.retrieve_candidates   : 联网搜索，保留来源元数据供统一重排；
+- web.search                : 联网搜索，直接返回精简文本上下文。
+
+工具只做"取数"，决策（是否重排、是否迭代检索）由图节点负责。
+"""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +22,7 @@ from app.utils.llm import get_llm
 
 
 def register_research_tools(registry: ToolRegistry) -> None:
+    """把研究类工具注册进指定注册表（幂等，供全局注册表初始化调用）。"""
     registry.register(
         ToolSpec(
             name="rag.retrieve",
@@ -63,15 +76,18 @@ def register_research_tools(registry: ToolRegistry) -> None:
 
 
 def _rag_retrieve(payload: dict[str, Any], context: ToolContext):
+    """本地知识库直接检索：返回最相关的文档（用于"仅文档"等需要精确结果的场景）。"""
     query = payload["query"]
     knowledge_base_id = payload.get("knowledge_base_id", "kb_default")
     retriever = get_retriever(knowledge_base_id=knowledge_base_id)
     if retriever is None:
+        # 知识库不存在或未初始化：返回空列表而非抛错，让上层走降级逻辑
         return []
     return retriever.invoke(query)
 
 
 def _rag_retrieve_candidates(payload: dict[str, Any], context: ToolContext):
+    """本地知识库广召回：稠密 + BM25 双通道取候选，交给后续全局重排（取 top-k）。"""
     return get_candidate_documents(
         payload["query"],
         knowledge_base_id=payload.get("knowledge_base_id", "kb_default"),
@@ -79,6 +95,11 @@ def _rag_retrieve_candidates(payload: dict[str, Any], context: ToolContext):
 
 
 def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    """LLM 证据评估：判断检索到的文档是否足以回答问题。
+
+    返回结构化评估（sufficient / coverage_gap / follow_up_queries），
+    供 Researcher 子图决定：证据够了就进 Writer，不够就带着补搜关键词重新检索。
+    """
     query = payload["query"]
     raw_context = payload.get("document_context", "")
     grader_prompt = f"""
@@ -101,10 +122,11 @@ def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> dict[
     """
     from app.utils.budget_enforcer import create_enforcer_from_state
 
+    # 评估走预算护栏：用当前节点的预算状态包裹 LLM 调用，超预算按策略处理
     enforcer = create_enforcer_from_state(dict(context.state))
     response, _ = enforcer.wrap_llm_call(
         "researcher",
-        get_llm(model_type="smart"),
+        get_llm(model_type="smart"),  # 评估用强推理模型（smart），判断准确率更高
         grader_prompt,
         dict(context.state),
     )
@@ -112,9 +134,15 @@ def _rag_relevance_grade(payload: dict[str, Any], context: ToolContext) -> dict[
 
 
 def _parse_evidence_assessment(content: str) -> dict[str, Any]:
-    """Normalize an LLM assessment without allowing malformed output into retrieval."""
+    """解析 LLM 的评估结果，并做防御性规范化——绝不把格式错误的输出放进检索决策。
+
+    兜底策略：
+    - 无法解析为 JSON 时，用"文本里是否含 YES"粗略判断是否充分；
+    - follow_up_queries 逐个清洗去重、限长、最多 3 条。
+    """
     raw = (content or "").strip()
     if raw.startswith("```"):
+        # 容忍模型用 Markdown 代码块包裹 JSON
         raw = raw.strip("`").removeprefix("json").strip()
     try:
         payload = json.loads(raw)
@@ -131,6 +159,7 @@ def _parse_evidence_assessment(content: str) -> dict[str, Any]:
             "follow_up_queries": [],
         }
 
+    # 规范化补搜关键词：去空白、去重、截断到 180 字符、最多 3 条
     queries = payload.get("follow_up_queries", [])
     if not isinstance(queries, list):
         queries = []
@@ -150,8 +179,10 @@ def _parse_evidence_assessment(content: str) -> dict[str, Any]:
 
 
 def _web_search(payload: dict[str, Any], context: ToolContext) -> str:
+    """联网搜索：返回拼接的纯文本内容（省 token，供节点直接当上下文用）。"""
     return search_tavily(payload["query"])
 
 
 def _web_retrieve_candidates(payload: dict[str, Any], context: ToolContext) -> list[dict[str, object]]:
+    """联网搜索：返回带来源元数据的候选（供统一去重 + 全局重排）。"""
     return search_tavily_candidates(payload["query"])

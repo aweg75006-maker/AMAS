@@ -1,100 +1,136 @@
 <div align="center">
 
-# 🌐 AMAS
+# AMAS
 
 ### Advanced Multi-Agent System
 
-**面向深度调研与报告生成的智能体工作流系统**
+**面向深度调研、证据检索与高质量报告生成的可观测多智能体系统**
 
-从意图识别、任务规划、知识检索到内容撰写、质量审查与定向优化，完成可追踪、可回滚的研究闭环。
+AMAS 将任务规划、Agentic RAG、内容生成、质量审查和多轮修改组织为一条可追踪、可暂停、可恢复的研究工作流。
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.0-1C3C3C?style=flat-square)](https://langchain-ai.github.io/langgraph/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.129-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Vue.js](https://img.shields.io/badge/Vue.js-3.5-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
-[![Vite](https://img.shields.io/badge/Vite-7.3-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker_Compose-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
-[在线体验](https://www.iflowcc.xyz/) · [功能特性](#features) · [界面预览](#preview) · [系统架构](#architecture) · [快速开始](#quick-start)
+[核心能力](#features) · [工作原理](#workflow) · [界面预览](#preview) · [快速开始](#quick-start) · [项目结构](#project-structure)
 
 </div>
 
 ---
 
+## 📖 项目简介
+
+AMAS 不是一次性调用大模型的聊天页面，而是一套围绕「研究任务」构建的多智能体执行系统。用户可以上传 PDF、选择仅文档或混合检索模式、设置写作前人工检查点，然后观察任务如何经过规划、检索、证据筛选、写作和审查，最终得到结构化研究报告。
+
+系统特别强调两个目标：
+
+- **研究过程可见**：不仅展示主 Agent 到了哪个节点，还会展开 Research Agent 内部的 Agentic RAG 子流程、候选数量、证据数量、迭代轮次与耗时。
+- **结果生成可控**：支持 Document Only / Hybrid 检索策略、写作前暂停、多轮追问与报告定向改写，并通过 Reviewer 形成质量闭环。
+
+---
+
 <a id="features"></a>
 
-## ✨ 功能特性
+## ✨ 核心能力
 
-### 🧠 多智能体研究闭环
+| 能力 | 当前实现 |
+| --- | --- |
+| **多智能体研究闭环** | Planner → Research Agent → Writer → Reviewer → Report；Reviewer 可触发重新规划或重写 |
+| **Agentic RAG** | 查询规划、本地召回、网络搜索、候选融合、语义重排、证据充分性检查、查询改写与证据打包 |
+| **混合检索** | PDF / ChromaDB 稠密召回 + BM25 稀疏召回 + Tavily Web Search |
+| **证据控制** | 跨来源去重、Cross-Encoder 重排、证据缺口识别与最多两轮迭代检索 |
+| **过程可观测** | 主工作流、RAG 子流程、Execution Stream、Pass / Round / Candidate / Evidence 指标实时展示 |
+| **Human-in-the-loop** | 可在首次写作或后续报告改写前暂停，注入人工要求后从 LangGraph checkpoint 继续 |
+| **多轮会话** | 持久化 Session / Turn，支持上下文窗口、历史摘要、跨轮语义召回与报告定向修改 |
+| **分层记忆** | Redis 热记忆、Chroma 跨轮语义记忆、SQLite 冷记忆与结构化关系图谱 |
+| **知识库管理** | PDF 上传、知识库隔离、文档统计、刷新与上下文清理 |
+| **流式体验** | FastAPI SSE 推送节点事件和自定义 RAG 事件，前端实时渲染 Markdown、链接与 KaTeX 公式 |
+| **运行可靠性** | SQLite checkpoint、节点级超时/重试、工具注册与执行封装、请求级错误信息、速率限制和上传校验 |
 
-- **意图路由**：自动区分新研究任务与基于既有报告的定向修改。
-- **任务规划**：将复杂主题拆解为可执行的检索与写作路径。
-- **深度研究**：支持本地知识库、全网搜索以及两者结合的 Hybrid 模式。
-- **内容生成**：聚合多源信息，生成结构化 Markdown 研究报告。
-- **质量审查**：Reviewer 对证据、结构与表达进行检查，并决定通过、重新规划或重写。
-- **局部优化**：无需重跑完整流程，即可针对已有报告继续追问和修改。
+---
 
-### 📚 知识库与检索
+<a id="workflow"></a>
 
-- **PDF 知识库**：支持批量上传、切分、向量化和知识库隔离。
-- **相关性裁判**：检索后先判断文档相关性，降低无关上下文对生成结果的干扰。
-- **智能降级**：纯文档模式在资料不相关时及时停止；Hybrid 模式可自动转向网络搜索。
-- **跨轮上下文**：通过会话摘要、滑动窗口与向量检索管理长对话上下文。
+## 🧭 工作原理
 
-### 🛡️ 工程化运行能力
+### 主工作流
 
-- **显式工作流引擎**：默认使用可测试的 Python Workflow Engine，保留 LangGraph legacy fallback。
-- **可靠工具运行时**：为 RAG、相关性判断和 Web Search 提供超时、重试与执行追踪。
-- **全链路可观测**：持久化 workflow run、节点、工具、路由决策和错误事件。
-- **企业基础能力**：集成 JWT 认证、RBAC 权限、审计日志、限流与多租户数据边界。
-- **实时反馈**：FastAPI + SSE 持续推送节点状态与报告内容，前端即时呈现执行进度。
+```mermaid
+flowchart LR
+    U["研究主题 / 修改指令"] --> R{"Intent Router"}
+    R -->|新研究任务| P["Task Planner"]
+    R -->|修改已有报告| F["Content Refiner"]
 
-### 🔁 运行韧性与人工介入（Checkpoint / HITL）
+    P --> A["Research Agent"]
+    A -->|证据就绪| W["Report Writer"]
+    A -->|Document Only 且资料无关| X["停止并提示"]
 
-- **断点续跑（Checkpoint / Resume）**：每个节点执行前在 Redis 落盘完整状态与下一执行节点；运行被取消、崩溃或超时后，可依据 `thread_id` 从最近断点恢复，**无需重跑已完成节点**。
-- **人机交互（HITL）**：支持在指定节点前主动暂停（如 `reviewer` 前等待人工确认/修订报告草稿），运行标记为 `PAUSED` 并下发暂停信号；人工输入通过 `/chat/resume` 的 `human_input` 注入断点状态后续跑。
-- **恢复接口**：
-  - `POST /chat/resume`：`{ "thread_id", "resume_instruction?", "human_input?" }` —— 从断点恢复，可追加补充指令或人工输入。
-  - `POST /chat` 支持 `hitl_pause_before` 字段，声明需要在哪个节点前暂停等待人工介入。
+    W --> Q{"Quality Reviewer"}
+    Q -->|PASS| O["Final Report"]
+    Q -->|REPLAN| P
+    Q -->|REWRITE| W
+    F --> O
+```
 
-### 🔔 被动触发（Webhook + Cron）
+1. **Intent Router** 判断本轮是新研究任务，还是针对已有报告的跟进修改。
+2. **Task Planner** 将问题拆成多个可检索、可写作的子任务。
+3. **Research Agent** 运行独立的 Agentic RAG 子图，构建经过重排和充分性检查的证据包。
+4. **Report Writer** 融合任务计划、证据和会话记忆，生成结构化 Markdown 报告。
+5. **Quality Reviewer** 检查内容质量，决定通过、重新规划或重写。
+6. **Content Refiner** 在后续轮次中直接理解修改指令，对既有报告进行定向更新。
 
-研究任务不仅能在对话中发起，也能由外部系统或定时器自动驱动，完成后推送飞书通知。
+### Research Agent：8 阶段 Agentic RAG
 
-- **Webhook 被动触发**：外部系统（如飞书事件、CI、监控告警）携带令牌调用 `POST /api/triggers/webhook` 即可触发一次研究；请求立即返回 `accepted`，研究在后台执行，结果（默认）通过飞书自定义机器人推送卡片。
-  - 请求体：`{ "token", "query", "search_mode?", "session_id?", "knowledge_base_id?", "notify?", "notify_webhook_url?", "tenant_id?", "user_id?" }`
-  - 令牌校验：服务端配置 `WEBHOOK_TRIGGER_TOKEN`，未配置返回 `503`；令牌不符返回 `401`。
-- **Cron 定时调度**：通过 `POST /api/triggers/cron/jobs` 注册定时研究任务，支持三种调度：
-  - `{"type":"interval","seconds":3600}` 每 N 秒
-  - `{"type":"daily","hour":9,"minute":0}` 每天本地时区 H:M
-  - `{"type":"cron","expr":"0 9 * * *"}` 标准 5 段 crontab（支持 `*` / `,` / `-` / `*/n`）
-  - 任务持久化到 Redis（key：`trigger:cron_job:{id}`，Redis 不可用时降级内存），后台循环按 `CRON_POLL_INTERVAL_SECONDS` 轮询到期任务并异步执行 + 飞书通知。
-  - 管理接口：`GET/POST /api/triggers/cron/jobs`、`GET/PATCH/DELETE /api/triggers/cron/jobs/{id}`、`POST /api/triggers/cron/jobs/{id}/run`（立即执行一次，便于调试）。
-- **飞书通知**：`app/integrations/feishu.py` 的 `FeishuNotifier` 向自定义机器人 webhook 推送文本/消息卡片，best-effort（失败仅记日志，不阻断主流程）；webhook 通过 `FEISHU_WEBHOOK_URL` 配置。
-- **配置项**（backend/.env）：`FEISHU_WEBHOOK_URL`、`WEBHOOK_TRIGGER_TOKEN`、`CRON_ENABLED`、`CRON_POLL_INTERVAL_SECONDS`、`CRON_JOBS`（可选，启动预置任务 JSON 数组）。
+Research Agent 不是单次 `search()` 调用，而是一个带状态、条件分支和迭代能力的 LangGraph 子图：
 
-### 🧩 第三方 Agent Connector 框架（P5）
+```mermaid
+flowchart LR
+    QP["01 Query Plan"] --> LR["02 Local Recall"]
+    LR --> WS["03 Web Search"]
+    WS --> FU["04 Fusion"]
+    FU --> RR["05 Rerank"]
+    RR --> EC{"06 Evidence Check"}
+    EC -->|证据不足| QR["07 Query Refine"]
+    QR --> LR
+    EC -->|证据充分或到达上限| EP["08 Evidence Package"]
+```
 
-把「第三方智能体 / 服务端点」抽象为可插拔的 Connector，让 IRIS 能像调用工具一样
-把子问题**委派给外部 Agent**（agent-to-agent 编排），或把子任务交给本系统内部的子 Agent。
-设计沿用已有的 `ToolRegistry` 模式，但 Connector 面向更高层的「智能体能力」。
+| 阶段 | 作用 |
+| --- | --- |
+| **01 Query Plan** | 根据用户问题、Planner 计划和历史检索提示生成本轮查询 |
+| **02 Local Recall** | 从当前知识库召回 PDF 片段，融合稠密向量和 BM25 关键词结果 |
+| **03 Web Search** | Hybrid 模式下通过 Tavily 获取网络候选；Document Only 模式跳过 |
+| **04 Fusion** | 统一本地与网络候选结构，按来源和内容去重 |
+| **05 Rerank** | 使用 Cross-Encoder 按问题相关性重新排序并选出核心证据 |
+| **06 Evidence Check** | 判断证据能否充分回答问题，并生成 coverage gap |
+| **07 Query Refine** | 证据不足时根据缺口生成补充查询，进入下一轮检索 |
+| **08 Evidence Package** | 将最终证据整理为 Writer 可直接消费的写作上下文 |
 
-- **统一抽象**：`app/connectors/base.py` 的 `BaseConnector`（协程 `invoke` + 同步 `run` 桥接）。
-  `connector.run(prompt, context=..., system_prompt=...)` → 返回结构化 `ConnectorResult`（含 success / error / meta），
-  失败统一降级为可读错误文本，不中断主流程。
-- **注册中心**：`app/connectors/registry.py` 的 `ConnectorRegistry` + 进程级单例 `get_connector_registry()`。
-- **内置实现**：
-  - `internal_subagent`（默认可用）：用 IRIS 自身 LLM（`get_llm`）充当子 Agent 处理子问题。
-  - `HttpAgentConnector`：调用外部 Agent 端点，支持 `openai_compatible`（`{base_url}/chat/completions`）与 `generic_json` 两种协议，基于 `httpx`，best-effort。
-- **配置驱动注册**：在 backend/.env 配置 `CONNECTORS`（JSON 数组）即可注册外部端点，无需改代码：
-  ```json
-  CONNECTORS=[{"name":"my_agent","type":"http_agent","config":{"base_url":"https://agent.example.com","api_key":"sk-xxx","model":"gpt-4o-mini"}}]
-  ```
-  支持类型：`http_agent` / `openai_compatible`（别名）/ `internal_subagent`。
-- **接入研究工作流**：已注册为研究工具 `delegate_to_connector`（挂在 `researcher` 节点），
-  Researcher 可在研究中把子问题委派给任意已注册 Connector 并回收结果：
-  - 工具入参：`{ "connector": "internal_subagent", "prompt": "...", "system_prompt": "..." }`
-- **测试**：`tests/test_connectors.py`（注册中心 / 配置路由 / HTTP Connector / 内部子 Agent / 工具桥接与降级，13 用例全绿）。
+前端会接收每个阶段的 `running / completed / failed` 事件，展示当前 Pass、Round、候选数、证据数、阶段耗时以及证据缺口。默认最多执行两轮检索，避免无限循环。
+
+### 检索模式
+
+| 模式 | 行为 |
+| --- | --- |
+| **Document Only** | 只使用当前知识库。若文档与问题无关，工作流会停止并明确提示，不使用网络内容补写 |
+| **Hybrid** | 同时使用本地知识库和 Web Search；即使本地没有文档，也能以纯网络检索方式完成研究 |
+
+---
+
+## 🖥️ 前端工作台
+
+新版前端将输入、知识库、人工检查点、执行过程和报告放在同一研究工作台中：
+
+- **Workflow Engine**：横向展示 Task Planning、Deep Search、Content Generation、Quality Assurance 和 Report 五个主阶段。
+- **Research Agent 面板**：展开 Agentic RAG 的 8 个内部步骤，并显示 Pass、Round、Candidates、Evidence 和实时状态。
+- **Execution Stream**：统一输出前端动作、后端节点事件、RAG 子流程事件、警告与错误，方便定位任务当前所在位置。
+- **Knowledge Store**：选择知识库、刷新文档列表，并查看知识库和文档数量。
+- **Human Checkpoint**：选择 `Before writing / revising` 后，首次写作和后续 Refiner 改写都会在生成报告前暂停。
+- **Report View**：接收 SSE 结果后以打字机效果呈现报告，支持 Markdown、外链和数学公式。
+- **Session Control**：显示当前会话状态、轮次与 Token 预算，并支持创建新会话。
 
 ---
 
@@ -102,57 +138,66 @@
 
 ## 🎬 界面预览
 
-### 研究工作台
+### 首页与研究工作台
 
-上传知识文档、选择检索模式并输入研究主题；左侧工作流会实时展示当前执行阶段。
+首页包含 PDF 上传、检索模式、研究主题、总工作流和报告区域。
 
 <p align="center">
-  <img src="docs/demo1.png" width="100%" alt="AMAS 研究工作台">
+  <img src="docs/首页.png" width="100%" alt="AMAS 首页展示">
 </p>
 
-### 报告生成
+### Agentic RAG 与执行效果
 
-报告以流式方式输出，工作流状态与正文同步更新，支持在同一会话中继续迭代。
+Research Agent 会逐步展示检索、融合、重排和证据检查过程；下方 Execution Stream 同步输出后端工作流事件。
 
 <p align="center">
-  <img src="docs/demo2.png" width="100%" alt="AMAS 报告生成效果">
+  <img src="docs/效果展示.png" width="100%" alt="AMAS Agentic RAG 与报告生成效果">
 </p>
 
 ---
 
-<a id="architecture"></a>
+## 🧠 会话与分层记忆
 
-## 🏗️ 系统架构
+AMAS 会为每次研究分配 Session 和 Turn，并在下一轮请求前重新装配相关上下文：
 
 ```mermaid
 flowchart LR
-    U["研究主题 / 修改指令"] --> R{"Intent Router"}
-    R -->|新课题| P["Task Planner"]
-    R -->|修改报告| F["Content Refiner"]
-
-    P --> S["Deep Researcher"]
-    K["PDF / ChromaDB"] --> S
-    S --> G{"Relevance Policy"}
-    G -->|资料有效| C["Report Writer"]
-    G -->|Hybrid 降级| W["Tavily Web Search"]
-    W --> C
-    G -->|Doc Only 无关| E["停止并提示"]
-
-    C --> V{"Quality Reviewer"}
-    V -->|PASS| O["Final Report"]
-    V -->|REPLAN| P
-    V -->|REWRITE| C
-    F --> O
+    T["当前问题"] --> C["Context Assembler"]
+    H["最近完整 Turn\nEpisodic Window"] --> C
+    S["历史压缩摘要\nSemantic Memory"] --> C
+    V["跨轮向量召回\nChromaDB"] --> C
+    G["结构化关系图谱"] --> C
+    D["SQLite 冷层归档"] --> C
+    C --> A["Agent Workflow"]
 ```
+
+- **近期完整记忆**：Redis 保存最近 Turn 的问题、计划、证据、报告和审查状态。
+- **历史语义记忆**：超出滑动窗口的内容会被压缩成摘要，并支持跨轮语义召回。
+- **冷层与图谱**：长期未访问记忆可归档到 SQLite；结构化抽取记录用户偏好、实体和关系。
+- **自动升温与维护**：冷层或图谱命中后可重新进入活跃上下文，后台维护任务负责归档、遗忘和知识抽取。
+- **预算感知**：记录会话与单轮 Token 使用量，在上下文变长时通过压缩控制预算。
+
+---
+
+## 🏗️ 技术架构
 
 | 层级 | 主要技术 | 职责 |
 | --- | --- | --- |
-| **交互层** | Vue 3、Tailwind CSS、Vite | 研究输入、知识库管理、工作流状态与报告渲染 |
-| **API 层** | FastAPI、SSE、Pydantic | 认证、会话、上传、流式响应与运行时查询 |
-| **Agent 层** | Python Workflow Engine、LangGraph fallback | 路由、规划、研究、撰写、审查与优化 |
-| **工具层** | Tool Registry、Tool Runtime、Tavily | 工具注册、超时重试、网络检索与调用追踪 |
-| **知识层** | ChromaDB、DashScope Embeddings | PDF 切分、向量索引、语义检索与跨轮召回 |
-| **数据层** | Redis、PostgreSQL | 会话缓存、知识元数据、审计与工作流记录 |
+| **交互层** | Vue 3、Tailwind CSS、Vite、Markdown-it、KaTeX | 研究输入、流程可视化、执行流和报告渲染 |
+| **API 层** | FastAPI、Pydantic、SSE | 对话、恢复、会话、知识库、文件上传和流式事件 |
+| **工作流层** | LangGraph、AsyncSqliteSaver | Agent 编排、条件路由、循环修订、checkpoint 与 HITL |
+| **Agent 层** | Planner、Researcher、Writer、Reviewer、Refiner | 规划、检索、写作、审查和定向修改 |
+| **检索层** | ChromaDB、DashScope Embeddings、BM25、Cross-Encoder、Tavily | 本地/网络召回、融合、重排和证据控制 |
+| **上下文层** | Redis、ChromaDB、SQLite | 会话、Turn、跨轮召回、冷记忆与关系图谱 |
+| **运行时层** | Tool Registry、超时/重试、Token Ledger、Rate Limiter | 工具执行、错误隔离、预算和服务保护 |
+
+### Checkpoint 与人工恢复
+
+- 主工作流和 Research Agent 子图均使用 LangGraph 状态管理。
+- 主流程 checkpoint 存储在 SQLite，可通过相同 `thread_id` 恢复。
+- `POST /api/chat` 可通过 `hitl_pause_before=writer` 在写作前触发中断。
+- `POST /api/chat/resume` 接收 `human_input`，从中断点继续执行。
+- 「Before writing / revising」同时覆盖 Writer 和 Refiner，后续报告修改不会绕过人工检查点。
 
 ---
 
@@ -163,10 +208,12 @@ flowchart LR
 ### 环境要求
 
 - Docker 与 Docker Compose（推荐）
-- 或 Python 3.10+、Node.js 22+、Redis、PostgreSQL
-- 可用的 OpenAI 兼容模型服务、DashScope Embedding 与 Tavily API Key
+- 或 Python 3.10+、Node.js 22+、Redis
+- OpenAI 兼容的聊天模型服务
+- DashScope API Key（文本向量化）
+- Tavily API Key（Hybrid / 纯网络搜索）
 
-### Docker Compose 启动
+### 使用 Docker Compose
 
 ```bash
 git clone https://github.com/aweg75006-maker/AMAS.git
@@ -175,22 +222,26 @@ cd AMAS
 cp .env.example backend/.env
 ```
 
-编辑 `backend/.env`，至少配置以下模型与检索参数：
+编辑 `backend/.env`，至少填写：
 
 ```dotenv
-# OpenAI 兼容接口；使用 OpenAI 官方接口时可留空 API_BASE
-OPENAI_API_BASE=https://your-openai-compatible-endpoint/v1
+# OpenAI 兼容接口；官方 OpenAI 接口可留空 OPENAI_API_BASE
+OPENAI_API_BASE=https://your-compatible-endpoint/v1
 OPENAI_API_KEY=your-api-key
 
 # PDF 向量化与网络检索
 DASHSCOPE_API_KEY=your-dashscope-api-key
 TAVILY_API_KEY=your-tavily-api-key
-
-# 生产环境请务必替换
-JWT_SECRET_KEY=replace-with-a-long-random-secret
 ```
 
-启动全部服务：
+如果兼容服务使用不同模型名，还可以覆盖：
+
+```dotenv
+LLM_FAST_MODEL=qwen3-max
+LLM_SMART_MODEL=deepseek-r1
+```
+
+启动服务：
 
 ```bash
 docker compose up --build
@@ -201,26 +252,30 @@ docker compose up --build
 | 前端 | [http://localhost:5173](http://localhost:5173) |
 | 后端 API | [http://localhost:8000](http://localhost:8000) |
 | API 文档 | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| 健康检查 | [http://localhost:8000/api/health](http://localhost:8000/api/health) |
 
 ### 本地开发
 
-先启动基础服务：
+先启动 Redis：
 
 ```bash
 docker compose up -d redis
 ```
 
-启动后端：
+准备并启动后端。已有 Conda `py312` 环境时可以直接复用：
 
 ```bash
+cp .env.example backend/.env
+# 本地运行后端时，将 backend/.env 中的 REDIS_URL 改为：
+# REDIS_URL=redis://localhost:6379/0
+
 cd backend
-python -m venv .venv
-source .venv/bin/activate
+conda activate py312
 pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-启动前端：
+另开终端启动前端：
 
 ```bash
 cd frontend
@@ -232,18 +287,50 @@ npm run dev
 
 ## ⚙️ 关键配置
 
-| 环境变量 | 是否必需 | 默认值 / 用途 |
-| --- | :---: | --- |
-| `OPENAI_API_BASE` | 视服务而定 | OpenAI 兼容接口地址 |
-| `OPENAI_API_KEY` | 是 | Planner、Writer、Reviewer 等模型调用 |
-| `DASHSCOPE_API_KEY` | 是 | `text-embedding-v4` 文本向量化 |
-| `TAVILY_API_KEY` | Hybrid 模式需要 | 全网搜索 |
-| `WORKFLOW_ENGINE` | 否 | 固定使用 `langgraph` |
-| `TOTAL_TOKEN_BUDGET` | 否 | 默认 `128000` |
+| 环境变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `OPENAI_API_BASE` | 空 | OpenAI 兼容接口地址 |
+| `OPENAI_API_KEY` | 空 | Planner、Writer、Reviewer、Refiner 与证据判断 |
+| `LLM_FAST_MODEL` | `qwen3-max` | 规划、写作等常规模型调用 |
+| `LLM_SMART_MODEL` | `deepseek-r1` | 复杂推理模型调用 |
+| `DASHSCOPE_API_KEY` | 空 | `text-embedding-v4` 文本向量化 |
+| `TAVILY_API_KEY` | 空 | Hybrid 与纯 Web Search |
+| `REDIS_URL` | `redis://localhost:6379/0` | 会话、知识库元数据、速率限制与热记忆 |
+| `TOTAL_TOKEN_BUDGET` | `128000` | 单会话总 Token 预算 |
+| `RAG_MAX_RETRIEVAL_ITERATIONS` | `2` | Agentic RAG 最大检索轮次 |
+| `RAG_BM25_ENABLED` | `true` | 是否启用关键词稀疏召回 |
+| `MEMORY_ENABLED` | `true` | 是否启用冷层、图谱和多级记忆检索 |
+| `MEMORY_WARM_DAYS` | `10` | 热记忆转入冷层前的时间窗 |
+| `MEMORY_COLD_RETENTION_DAYS` | `30` | 冷记忆默认保留时间 |
+| `WORKFLOW_NODE_TIMEOUT_SECONDS` | `120` | 单节点执行超时 |
+| `WORKFLOW_NODE_MAX_RETRIES` | `1` | 单节点最大重试次数 |
+| `UPLOAD_MAX_FILES` | `5` | 单次最多上传 PDF 数量 |
+| `UPLOAD_MAX_FILE_SIZE_BYTES` | `20971520` | 单文件最大 20 MB |
 
-更多 Docker 开发说明见 [docs/DOCKER_DEV.md](docs/DOCKER_DEV.md)，工作流引擎发布与回滚说明见 [docs/WORKFLOW_ENGINE_ROLLOUT.md](docs/WORKFLOW_ENGINE_ROLLOUT.md)。
+完整默认值见 [backend/app/core/config.py](backend/app/core/config.py) 和 [.env.example](.env.example)。
 
 ---
+
+## 🔌 主要 API
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/chat` | 发起研究并通过 SSE 返回主流程与 RAG 事件 |
+| `POST` | `/api/chat/resume` | 向 HITL checkpoint 注入人工输入并继续 |
+| `POST` | `/api/upload` | 上传 PDF 并写入指定知识库 |
+| `POST` | `/api/clear` | 清理指定知识库上下文 |
+| `GET/POST` | `/api/knowledge-bases` | 查询或创建知识库 |
+| `GET` | `/api/knowledge-bases/{id}/documents` | 查询知识库文档 |
+| `POST` | `/api/sessions` | 创建新会话 |
+| `GET` | `/api/sessions/{id}` | 查询会话状态与预算 |
+| `GET` | `/api/sessions/{id}/history` | 查询分层会话历史 |
+| `GET` | `/api/health` | 服务及元数据后端健康检查 |
+
+请求与响应结构可在服务启动后访问 [/docs](http://localhost:8000/docs) 查看。
+
+---
+
+<a id="project-structure"></a>
 
 ## 📂 项目结构
 
@@ -251,35 +338,56 @@ npm run dev
 AMAS/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # FastAPI 路由与 SSE 流式接口
-│   │   ├── graph/          # 工作流引擎、Agent 节点与路由策略
-│   │   ├── harness/        # 工作流清单、Prompt 与版本管理
-│   │   ├── tools/          # Tool Registry 与 Tool Runtime
-│   │   ├── rag/            # PDF 解析、ChromaDB 与语义检索
-│   │   ├── repositories/   # 数据访问层
-│   │   └── services/       # 会话、知识库与运行时服务
-│   └── tests/              # 后端测试
+│   │   ├── api/                 # FastAPI 路由、SSE、会话与知识库接口
+│   │   ├── graph/
+│   │   │   ├── nodes/           # Planner / Researcher / Writer / Reviewer / Refiner
+│   │   │   ├── policies/        # 检索策略与工作流循环策略
+│   │   │   ├── graph.py         # LangGraph 主流程
+│   │   │   └── runtime.py       # HITL、节点超时与重试
+│   │   ├── harness/             # 节点清单、Prompt 与运行参数
+│   │   ├── rag/                 # ChromaDB、BM25、Embedding 与 Reranker
+│   │   ├── tools/               # Tool Registry、Runtime 与搜索工具
+│   │   ├── repositories/        # Redis 会话和知识库数据访问
+│   │   ├── services/            # 历史、知识库、限流与运行时服务
+│   │   └── utils/
+│   │       └── memory/           # 冷记忆、图谱、检索和生命周期维护
+│   └── tests/                   # 后端回归测试
 ├── frontend/
-│   └── src/                # Vue 页面、组件与 API 服务
-├── docs/                   # 截图与开发文档
-└── docker-compose.yml      # 本地完整环境编排
+│   └── src/
+│       ├── components/
+│       │   ├── WorkflowChain.vue
+│       │   └── ResearchProcess.vue
+│       ├── services/api.js       # SSE 与 REST API 客户端
+│       └── App.vue               # 研究工作台
+├── docs/                         # 截图、Docker 与记忆系统文档
+└── docker-compose.yml            # 前端、后端与 Redis 编排
 ```
 
 ---
 
 ## 🧪 开发与验证
 
-```bash
-# 后端测试
-cd backend
-pytest -q
+后端测试：
 
-# 前端生产构建
+```bash
+cd backend
+conda run -n py312 python -m pytest -q
+```
+
+前端生产构建：
+
+```bash
 cd frontend
 npm run build
 ```
 
-欢迎通过 [Issues](https://github.com/aweg75006-maker/AMAS/issues) 反馈问题或提交改进建议。提交 Pull Request 前，请确保相关测试与前端构建通过。
+提交代码前建议同时执行：
+
+```bash
+git diff --check
+```
+
+开发文档：[Docker 本地开发](docs/DOCKER_DEV.md)
 
 ---
 

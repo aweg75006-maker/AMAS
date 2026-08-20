@@ -25,6 +25,7 @@ from app.utils.summarizer import (
     TurnSummarizer, FusionSummarizer, TurnSummary,
 )
 from app.utils.cross_turn_retriever import CrossTurnRetriever
+from app.utils.memory.recorder import get_recorder
 
 logger = logging.getLogger("iris.compression")
 
@@ -108,13 +109,19 @@ class CompressionScheduler:
                 result["errors"].append(f"Turn {turn.get('turn_id')}: {str(e)}")
                 logger.warning(f"摘要生成失败: {e}")
 
-        # 4. 索引到 CrossTurnRetriever
+        # 4. 索引到 CrossTurnRetriever（温层），并同步写入记忆冷层
+        recorder = get_recorder()
         for summary in new_summaries:
             try:
                 if self._retriever.index(summary):
                     result["indexed"] += 1
             except Exception as e:
                 logger.warning(f"索引失败: {e}")
+            # 冷层记录与温层索引共享 turn_id，供冷热迁移/多级检索对齐
+            try:
+                recorder.record_summary(session_id, summary)
+            except Exception as e:
+                logger.warning(f"记忆冷层写入失败: {e}")
 
         # 5. 持久化摘要到 Redis
         if self._redis and new_summaries:

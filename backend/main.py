@@ -1,4 +1,5 @@
 import uuid
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,27 @@ logger = get_logger("iris.main")
 logger.info("config_loaded", extra={"config": settings.safe_summary()})
 
 
-app = FastAPI(title=settings.app_name)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期：启动记忆维护循环，退出时优雅停止。"""
+    maintenance = None
+    if settings.memory_enabled:
+        try:
+            from app.utils.memory.scheduler import get_maintenance_scheduler
+            maintenance = get_maintenance_scheduler()
+            maintenance.start()
+            logger.info("memory_maintenance_started")
+        except Exception as e:
+            logger.warning("memory_maintenance_start_failed", extra={"error": str(e)})
+    yield
+    if maintenance is not None:
+        try:
+            maintenance.stop()
+        except Exception:
+            pass
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

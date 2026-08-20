@@ -1,6 +1,12 @@
 from dataclasses import dataclass
 
+import pytest
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.graph import START, StateGraph
+
 from app.graph.nodes import researcher
+from app.graph.runtime import wrap_node
+from app.graph.state import AgentState
 from app.tools.registry import ToolRegistry, ToolSpec, reset_tool_registry_for_tests
 
 
@@ -175,3 +181,55 @@ def test_research_subgraph_exposes_the_retrieval_loop():
         "finalize",
     ):
         assert node_name in mermaid
+
+
+@pytest.mark.asyncio
+async def test_researcher_streams_structured_subgraph_progress(monkeypatch):
+    registry = ToolRegistry()
+    calls = []
+    _register_research_tools(registry, calls)
+    monkeypatch.setattr(researcher, "get_reranker", lambda: FakeReranker())
+    monkeypatch.setattr(researcher.settings, "rag_max_retrieval_iterations", 0)
+
+    workflow = StateGraph(AgentState)
+    workflow.add_node("researcher", wrap_node("researcher", researcher.research_node))
+    workflow.add_edge(START, "researcher")
+    reset_tool_registry_for_tests(registry)
+    try:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
+            graph = workflow.compile(checkpointer=checkpointer)
+            stream_events = [
+                event
+                async for event in graph.astream(
+                    {
+                        "query": "IRIS 工具注册是什么",
+                        "plan": [],
+                        "search_mode": "hybrid",
+                        "knowledge_base_id": "kb_test",
+                    },
+                    config={"configurable": {"thread_id": "research-progress-sqlite"}},
+                    stream_mode=["updates", "custom"],
+                )
+            ]
+    finally:
+        reset_tool_registry_for_tests(None)
+
+    progress = [payload for mode, payload in stream_events if mode == "custom"]
+    assert progress[0]["stage"] == "initialize"
+    assert progress[0]["status"] == "running"
+    assert progress[-1]["stage"] == "finalize"
+    assert progress[-1]["status"] == "completed"
+    assert progress[-1]["details"]["evidence_count"] == 2
+
+    completed_stages = {
+        event["stage"] for event in progress if event["status"] == "completed"
+    }
+    assert completed_stages == {
+        "initialize",
+        "retrieve_local",
+        "retrieve_web",
+        "fuse_candidates",
+        "rerank_candidates",
+        "evaluate_evidence",
+        "finalize",
+    }

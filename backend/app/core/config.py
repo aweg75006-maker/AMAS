@@ -87,6 +87,25 @@ class Settings(BaseSettings):
     rag_bm25_enabled: bool = True
     rag_bm25_top_k: int = 20
 
+    # ── 分层记忆系统（冷热分层 + 生命周期 + 图谱 + 多级检索）──
+    # 总开关：关闭后记忆层全部静默降级为"仅现有能力"（Redis 回合 + Chroma 摘要）。
+    memory_enabled: bool = True
+    # SQLite 冷层 / 图谱库路径（自动创建目录）
+    memory_db_path: Path = Field(default=APP_DIR / "data" / "memory.db")
+    # 冷热迁移时间窗（天）：超过 warm_days 未访问的热记忆 → 归档冷层；
+    # 冷层保留超过 cold_retention_days → 永久删除（受 protected 保护除外）。
+    memory_hot_days: int = 3
+    memory_warm_days: int = 10
+    memory_cold_retention_days: int = 30
+    # 搜索结果缓存 TTL（秒，默�� 3 天）；缓存层只做加速，Redis/Chroma/SQLite 才是事实源。
+    memory_cache_ttl: int = 259_200
+    # 图谱抽取触发条件：单个 thread 累计回合数达到该值才值得做 LLM 结构化抽取。
+    memory_consolidate_min_turns: int = 10
+    # 冷层 LIKE 关键词召回的上限
+    memory_cold_search_limit: int = 5
+    # 记忆维护周期（秒）：归档/遗忘/图谱抽取的循环间隔，默认每 6 小时一轮。
+    memory_maintenance_interval_seconds: float = 21_600
+
     upload_max_files: int = 5
     upload_max_file_size_bytes: int = 20 * 1024 * 1024
     upload_allowed_extensions: str = ".pdf"
@@ -151,6 +170,8 @@ class Settings(BaseSettings):
             "total_token_budget": self.total_token_budget,
             "rag_chroma_db_path": str(self.rag_chroma_db_path),
             "rag_upload_dir": str(self.rag_upload_dir),
+            "memory_enabled": self.memory_enabled,
+            "memory_db_path": str(self.memory_db_path),
             "upload_max_files": self.upload_max_files,
             "upload_max_file_size_bytes": self.upload_max_file_size_bytes,
             "upload_allowed_extensions": self.upload_allowed_extensions,

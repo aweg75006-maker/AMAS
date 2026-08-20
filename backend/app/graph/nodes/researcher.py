@@ -10,9 +10,12 @@ if str(_backend_root) not in sys.path:
     sys.path.insert(0, str(_backend_root))
 
 import hashlib
+import time
+from collections.abc import Callable
 from functools import lru_cache
 from typing import Any, Literal, TypedDict
 
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from app.core.config import settings
@@ -49,6 +52,131 @@ class ResearchState(TypedDict, total=False):
     search_results: list[str]          # 最终输出：格式化的证据列表
     should_stop: bool                  # Document Only 模式下文档不相关时置 True
     tool_runs: list[dict[str, Any]]    # 工具调用追踪记录
+
+
+_RESEARCH_STAGE_META = {
+    "initialize": ("Query planning", "生成并去重检索关键词"),
+    "retrieve_local": ("Local retrieval", "从本地知识库召回候选证据"),
+    "retrieve_web": ("Web retrieval", "从网络搜索召回候选来源"),
+    "fuse_candidates": ("Candidate fusion", "合并并去重多来源候选"),
+    "rerank_candidates": ("Semantic rerank", "按问题相关性精排候选证据"),
+    "evaluate_evidence": ("Evidence check", "判断当前证据是否足够回答问题"),
+    "refine_query": ("Query refinement", "根据证据缺口生成补充检索词"),
+    "finalize": ("Evidence package", "整理可供写作节点使用的最终证据"),
+}
+
+
+def _progress_details(stage: str, state: ResearchState) -> dict[str, Any]:
+    """只暴露适合前端展示的计数和短摘要，避免推送大段候选正文。"""
+    if stage == "initialize":
+        return {
+            "query_count": len(state.get("active_queries", [])),
+            "queries": state.get("active_queries", [])[:4],
+        }
+    if stage == "retrieve_local":
+        return {
+            "candidate_count": len(state.get("local_candidates", [])),
+            "query_count": len(state.get("active_queries", [])),
+        }
+    if stage == "retrieve_web":
+        return {
+            "candidate_count": len(state.get("web_candidates", [])),
+            "query_count": len(state.get("active_queries", [])),
+        }
+    if stage == "fuse_candidates":
+        return {"candidate_count": len(state.get("candidate_pool", []))}
+    if stage == "rerank_candidates":
+        ranked = state.get("ranked_evidence", [])
+        return {
+            "evidence_count": len(ranked),
+            "top_score": round(float(ranked[0].get("rerank_score", 0.0)), 3) if ranked else None,
+        }
+    if stage == "evaluate_evidence":
+        return {
+            "sufficient": bool(state.get("context_sufficient")),
+            "coverage_gap": state.get("coverage_gap", "")[:180],
+            "follow_up_queries": state.get("follow_up_queries", [])[:3],
+        }
+    if stage == "refine_query":
+        return {
+            "query_count": len(state.get("active_queries", [])),
+            "queries": state.get("active_queries", [])[:3],
+        }
+    if stage == "finalize":
+        return {
+            "evidence_count": len(state.get("search_results", [])),
+            "should_stop": bool(state.get("should_stop")),
+        }
+    return {}
+
+
+def _emit_research_progress(
+    state: ResearchState,
+    stage: str,
+    status: str,
+    *,
+    progress_writer: Callable[[dict[str, Any]], None] | None = None,
+    duration_ms: int | None = None,
+    error: str = "",
+) -> None:
+    if not callable(progress_writer):
+        return
+    label, message = _RESEARCH_STAGE_META[stage]
+    payload = {
+        "kind": "research_progress",
+        "agent": "researcher",
+        "stage": stage,
+        "status": status,
+        "label": label,
+        "message": message,
+        "iteration": int(state.get("retrieval_iteration", 0)) + 1,
+        "details": _progress_details(stage, state),
+    }
+    if duration_ms is not None:
+        payload["duration_ms"] = duration_ms
+    if error:
+        payload["error"] = error[:300]
+    progress_writer(payload)
+
+
+def _tracked_stage(
+    stage: str,
+    fn: Callable[[ResearchState], dict[str, Any]],
+    progress_writer: Callable[[dict[str, Any]], None] | None = None,
+) -> Callable[[ResearchState], dict[str, Any]]:
+    """为 Researcher 子图节点增加开始/完成/失败的实时观测事件。"""
+    def tracked(state: ResearchState) -> dict[str, Any]:
+        _emit_research_progress(
+            state,
+            stage,
+            "running",
+            progress_writer=progress_writer,
+        )
+        started_at = time.perf_counter()
+        try:
+            update = fn(state)
+        except Exception as exc:
+            duration_ms = int((time.perf_counter() - started_at) * 1000)
+            _emit_research_progress(
+                state,
+                stage,
+                "failed",
+                progress_writer=progress_writer,
+                duration_ms=duration_ms,
+                error=str(exc),
+            )
+            raise
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        _emit_research_progress(
+            {**state, **update},
+            stage,
+            "completed",
+            progress_writer=progress_writer,
+            duration_ms=duration_ms,
+        )
+        return update
+
+    return tracked
 
 
 def _append_tool_run(tool_runs: list[dict[str, Any]], result: Any) -> None:
@@ -350,18 +478,19 @@ def finalize_research(state: ResearchState) -> dict[str, Any]:
     }
 
 
-@lru_cache
-def create_research_graph():
+def _build_research_graph(
+    progress_writer: Callable[[dict[str, Any]], None] | None = None,
+):
     """构建 Researcher 子图：initialize → retrieve_local → [retrieve_web] → fuse → rerank → evaluate → [refine] → finalize。"""
     workflow = StateGraph(ResearchState)
-    workflow.add_node("initialize", initialize_research)
-    workflow.add_node("retrieve_local", retrieve_local)
-    workflow.add_node("retrieve_web", retrieve_web)
-    workflow.add_node("fuse_candidates", fuse_candidates)
-    workflow.add_node("rerank_candidates", rerank_candidates)
-    workflow.add_node("evaluate_evidence", evaluate_evidence)
-    workflow.add_node("refine_query", refine_query)
-    workflow.add_node("finalize", finalize_research)
+    workflow.add_node("initialize", _tracked_stage("initialize", initialize_research, progress_writer))
+    workflow.add_node("retrieve_local", _tracked_stage("retrieve_local", retrieve_local, progress_writer))
+    workflow.add_node("retrieve_web", _tracked_stage("retrieve_web", retrieve_web, progress_writer))
+    workflow.add_node("fuse_candidates", _tracked_stage("fuse_candidates", fuse_candidates, progress_writer))
+    workflow.add_node("rerank_candidates", _tracked_stage("rerank_candidates", rerank_candidates, progress_writer))
+    workflow.add_node("evaluate_evidence", _tracked_stage("evaluate_evidence", evaluate_evidence, progress_writer))
+    workflow.add_node("refine_query", _tracked_stage("refine_query", refine_query, progress_writer))
+    workflow.add_node("finalize", _tracked_stage("finalize", finalize_research, progress_writer))
     workflow.add_edge(START, "initialize")
     workflow.add_edge("initialize", "retrieve_local")
     workflow.add_conditional_edges("retrieve_local", route_after_local)
@@ -372,6 +501,12 @@ def create_research_graph():
     workflow.add_edge("refine_query", "retrieve_local")
     workflow.add_edge("finalize", END)
     return workflow.compile()
+
+
+@lru_cache
+def create_research_graph():
+    """返回不带实时 writer 的可复用子图，供测试和命令行直接调用。"""
+    return _build_research_graph()
 
 
 def research_node(state: AgentState) -> dict[str, Any]:
@@ -385,7 +520,15 @@ def research_node(state: AgentState) -> dict[str, Any]:
             "plan_count": len(state.get("plan", [])),
         },
     )
-    result = create_research_graph().invoke(
+    try:
+        progress_writer = get_stream_writer()
+    except RuntimeError:
+        # research_node 也支持在单元测试/命令行中脱离 LangGraph 直接运行。
+        progress_writer = None
+
+    # writer 只捕获在本次子图的节点闭包里，绝不能进入可持久化状态；
+    # AsyncSqliteSaver 使用 msgpack，函数对象无法被序列化。
+    result = _build_research_graph(progress_writer).invoke(
         {
             "workflow_state": dict(state),
             "query": state["query"],

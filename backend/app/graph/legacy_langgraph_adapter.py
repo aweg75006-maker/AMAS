@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Any
 
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
@@ -17,11 +18,18 @@ class LangGraphWorkflowEngineAdapter:
         self,
         initial_state: AgentState | Command,
         config: dict | None = None,
-    ) -> AsyncIterator[dict[str, dict]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         async with AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as memory_saver:
             graph = create_graph(memory=memory_saver)
-            async for event in graph.astream(initial_state, config=config):
-                yield event
+            async for stream_mode, event in graph.astream(
+                initial_state,
+                config=config,
+                stream_mode=["updates", "custom"],
+            ):
+                if stream_mode == "custom":
+                    yield {"__custom__": event}
+                else:
+                    yield event
 
     async def get_state(self, config: dict) -> AgentState:
         async with AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH) as memory_saver:

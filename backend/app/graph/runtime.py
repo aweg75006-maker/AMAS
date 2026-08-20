@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 import asyncio
 import time
 from collections.abc import Callable
+
+from langchain_core.runnables import RunnableConfig
 
 # 全局设置（兜底用的默认重试/超时值来自这里）
 from app.core.config import settings
@@ -21,6 +21,18 @@ from langgraph.types import interrupt
 
 
 logger = get_logger("iris.graph.runtime")
+
+
+def _should_pause_before(requested_node: str | None, node_name: str) -> bool:
+    """Return whether the selected human checkpoint applies to this node.
+
+    In follow-up turns, edits to an existing report are routed directly to the
+    refiner instead of the writer.  From the user's perspective both are
+    writing operations, so the "before writing" checkpoint must cover both.
+    """
+    if requested_node == "writer":
+        return node_name in {"writer", "refiner"}
+    return requested_node == node_name
 
 
 class WorkflowNodeExecutionError(Exception):
@@ -65,7 +77,7 @@ def wrap_node(
     """
     async def wrapped(
         state: AgentState,
-        config: dict | None = None,
+        config: RunnableConfig | None = None,
     ) -> dict:
         # 复制一份状态，避免直接改原始 state
         effective_state = dict(state)
@@ -77,7 +89,7 @@ def wrap_node(
 
         # ---- ① 人工介入（HITL）暂停逻辑 ----
         # 如果当前节点被标记成「需要在执行前暂停等人」，就调用 interrupt 中断工作流
-        if effective_state.get("hitl_pause_before") == node_name:
+        if _should_pause_before(effective_state.get("hitl_pause_before"), node_name):
             human_input = interrupt(
                 {
                     "pause_node": node_name,
@@ -150,7 +162,7 @@ def wrap_node(
                 # 把人工输入（如有）和「清除暂停标记」合并回结果，返回给图
                 if effective_state.get("human_input"):
                     result = {**result, "human_input": effective_state["human_input"]}
-                if state.get("hitl_pause_before") == node_name:
+                if _should_pause_before(state.get("hitl_pause_before"), node_name):
                     result = {**result, "hitl_pause_before": ""}
                 return result
             except asyncio.TimeoutError as exc:

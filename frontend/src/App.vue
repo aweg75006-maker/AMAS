@@ -1,308 +1,316 @@
 <template>
     <transition name="slide-down">
-        <div v-if="showWarning" class="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 bg-amber-50 border border-amber-200 text-amber-800 px-6 py-3 rounded-full shadow-lg flex items-center gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+        <div v-if="showWarning" class="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 bg-[#FAEEDA] border border-[#EF9F27] text-[#854F0B] px-6 py-3 flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[#BA7517]" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
             </svg>
             <span class="text-sm font-medium">{{ warningMessage }}</span>
-            <button @click="showWarning = false" class="text-amber-500 hover:text-amber-700">
+            <button @click="showWarning = false" class="text-[#BA7517] hover:text-[#854F0B]">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
             </button>
         </div>
     </transition>
-  <div class="min-h-screen bg-gray-50 text-gray-900 font-sans relative overflow-x-hidden selection:bg-blue-100 selection:text-blue-900">
-    
-    <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-300/30 rounded-full blur-[120px] mix-blend-multiply animate-blob"></div>
-        <div class="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-300/30 rounded-full blur-[120px] mix-blend-multiply animate-blob animation-delay-2000"></div>
-        <div class="absolute bottom-[-20%] left-[20%] w-[40%] h-[40%] bg-indigo-300/30 rounded-full blur-[120px] mix-blend-multiply animate-blob animation-delay-4000"></div>
-    </div>
+  <div class="min-h-screen bg-[#F7F6F1] text-[#0F1115] font-sans">
 
-    <header class="sticky top-0 z-50 border-b border-white/20 bg-white/70 backdrop-blur-xl">
-      <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <header class="sticky top-0 z-50 border-b border-[#D8D5C9] bg-[#F7F6F1]/90 backdrop-blur">
+      <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
         <div class="flex items-center gap-3">
-          <div class="relative w-10 h-10 flex items-center justify-center bg-gradient-to-tr from-blue-600 to-purple-600 rounded-xl shadow-lg shadow-blue-500/20 text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-          </div>
+          <div class="w-9 h-9 flex items-center justify-center bg-[#0F1115] text-[#F7F6F1] font-mono text-[14px] font-medium">A</div>
           <div class="flex flex-col">
-            <h1 class="text-2xl font-black tracking-tighter bg-gradient-to-r from-blue-700 via-purple-600 to-indigo-600 bg-clip-text text-transparent" style="font-family: 'Orbitron', sans-serif;">
+            <h1 class="text-[15px] font-medium tracking-[0.12em]" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
               AMAS
             </h1>
-            <span class="text-[10px] font-semibold text-gray-500 tracking-[0.05em] uppercase -mt-1">
+            <span class="hidden sm:block text-[10px] text-[#888780] tracking-[0.14em] uppercase mt-0.5">
               Advanced Multi-Agent System
             </span>
           </div>
         </div>
 
-        <!-- Phase 2: 会话信息 + 操作按钮 -->
+        <!-- 会话信息 + 操作按钮（mission-control 风） -->
         <div class="flex items-center gap-3">
-          <div v-if="sessionTurnCount > 0" class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-full text-xs text-blue-700 font-medium">
-            <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-            {{ sessionTurnCount }} turn{{ sessionTurnCount > 1 ? 's' : '' }}
-          </div>
-          <div class="hidden sm:block text-[10px] text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded">
-            {{ sessionId ? sessionId.substring(0, 12) + '...' : '...' }}
-          </div>
+          <span class="hidden md:inline-flex px-3 py-1.5 border border-[#D8D5C9] rounded-full text-[11px] font-mono text-[#3B3D43]">
+            {{ sessionId ? sessionId.substring(0, 14) + '...' : '...' }}
+          </span>
+          <span class="hidden sm:inline-flex px-3 py-1.5 border border-[#0F1115] rounded-full text-[11px] font-mono text-[#0F1115] items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#0F6E56] animate-pulse"></span>
+            OPERATIONAL
+          </span>
           <button
             @click="handleNewSession"
-            class="px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors uppercase tracking-wide"
-            title="Start new research session"
+            class="px-3 sm:px-4 py-1.5 bg-[#0F1115] text-[#F7F6F1] text-[11px] font-medium tracking-[0.1em] uppercase rounded hover:bg-[#3B3D43] transition-colors whitespace-nowrap"
           >
-            + New
+            + NEW<span class="hidden sm:inline"> SESSION</span>
           </button>
         </div>
       </div>
     </header>
 
-    <main class="max-w-7xl mx-auto p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 mt-4">
+    <main class="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-5">
       
-      <div class="lg:col-span-4 space-y-6">
-        
-        <div class="bg-white/80 backdrop-blur-xl p-6 rounded-2xl shadow-xl border border-white/40 space-y-5">
-          
-            <div>
-                <div class="flex justify-between items-center mb-2">
-                    <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Knowledge Base</label>
-                    <span class="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Max 5 PDFs</span>
+      <aside class="lg:col-span-4 space-y-4">
+
+        <!-- 知识库（Knowledge Base） -->
+        <section class="bg-white border border-[#D8D5C9] p-5 space-y-4">
+          <div class="flex justify-between items-center">
+            <label class="text-[10px] font-medium text-[#888780] tracking-[0.18em] uppercase">Knowledge base</label>
+            <span class="text-[10px] text-[#888780] border border-[#D8D5C9] px-2 py-0.5 font-mono">MAX 5 PDFs</span>
+          </div>
+
+          <div
+              @dragover.prevent="isDragging = true"
+              @dragleave.prevent="isDragging = false"
+              @drop.prevent="handleDrop"
+              class="relative group cursor-pointer border border-dashed border-[#888780] hover:border-[#0F1115] transition-colors p-5 text-center bg-[#F7F6F1]"
+              :class="isDragging ? 'border-[#0F1115] bg-[#FFF]' : ''"
+          >
+            <input type="file" multiple accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" @change="handleFileSelect" />
+
+            <div v-if="uploadedFiles.length === 0" class="pointer-events-none flex flex-col items-center">
+              <svg width="22" height="26" viewBox="0 0 24 28" fill="none" stroke="#888780" stroke-width="1.2">
+                <path d="M5 1h9l5 5v21H5z"/><path d="M14 1v5h5"/>
+              </svg>
+              <p class="text-[12px] text-[#3B3D43] mt-2 font-medium">Drop PDFs here</p>
+              <p class="text-[10px] text-[#888780] mt-1 font-mono">.pdf · 20 MB max</p>
+            </div>
+
+            <div v-else class="w-full space-y-2 pointer-events-none z-10">
+              <div v-for="(file, i) in uploadedFiles" :key="i" class="flex items-center justify-between bg-white border border-[#E7E4D8] px-3 py-2 text-xs animate-fade-in-up">
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8  20 8"/></svg>
+                  <span class="truncate max-w-[150px] text-[#3B3D43] font-medium">{{ file.name }}</span>
                 </div>
-                
-                <div 
-                    @dragover.prevent="isDragging = true"
-                    @dragleave.prevent="isDragging = false"
-                    @drop.prevent="handleDrop"
-                    class="relative group cursor-pointer border-2 border-dashed rounded-xl p-4 transition-all duration-300 flex flex-col items-center justify-center text-center min-h-[100px]"
-                    :class="[
-                        isDragging ? 'border-blue-500 bg-blue-50/50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50/50',
-                    ]"
+                <svg class="w-4 h-4 text-[#0F6E56]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Doc Only / Hybrid 模式 -->
+          <div class="grid grid-cols-2 border border-[#D8D5C9]">
+            <button
+                @click="setMode('document')"
+                :disabled="uploadedFiles.length === 0"
+                class="py-2.5 text-[10px] font-medium tracking-[0.1em] uppercase flex items-center justify-center gap-1.5 transition-colors"
+                :class="[
+                  searchMode === 'document' ? 'bg-[#0F1115] text-[#F7F6F1]' : 'text-[#888780] hover:text-[#3B3D43]',
+                  uploadedFiles.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                ]"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"/></svg>
+              Doc Only
+            </button>
+            <button
+                @click="setMode('hybrid')"
+                class="py-2.5 text-[10px] font-medium tracking-[0.1em] uppercase flex items-center justify-center gap-1.5 transition-colors"
+                :class="searchMode === 'hybrid' ? 'bg-[#0F1115] text-[#F7F6F1]' : 'text-[#888780] hover:text-[#3B3D43]'"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 2a14.5 14.5 0 0 1 0 20"/></svg>
+              Hybrid
+            </button>
+          </div>
+        </section>
+
+        <!-- 已索引知识库 -->
+        <section class="bg-white border border-[#D8D5C9] p-5 space-y-4">
+          <div class="flex items-end justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <label for="knowledge-store" class="block text-[10px] font-medium text-[#888780] tracking-[0.18em] uppercase">
+                Knowledge store
+              </label>
+              <select
+                  id="knowledge-store"
+                  v-model="activeKnowledgeBaseId"
+                  @change="loadKnowledgeDocuments"
+                  class="mt-2 w-full bg-white border border-[#D8D5C9] px-3 py-2 text-[12px] font-medium text-[#0F1115] focus:outline-none focus:border-[#0F1115]"
+              >
+                <option
+                    v-for="kb in knowledgeBases"
+                    :key="kb.knowledge_base_id"
+                    :value="kb.knowledge_base_id"
                 >
-                    <input type="file" multiple accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" @change="handleFileSelect" />
-                    
-                    <div v-if="uploadedFiles.length === 0" class="pointer-events-none flex flex-col items-center">
-                        <div class="w-8 h-8 mb-2 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                        </div>
-                        <p class="text-xs text-gray-500 font-medium">Drop PDFs here</p>
-                    </div>
-
-                    <div v-else class="w-full space-y-2 pointer-events-none z-10">
-                        <div v-for="(file, i) in uploadedFiles" :key="i" class="flex items-center justify-between bg-white px-3 py-2 rounded-lg shadow-sm border border-gray-100 text-xs animate-fade-in-up">
-                            <div class="flex items-center gap-2 overflow-hidden">
-                                <span class="text-red-500">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                </span>
-                                <span class="truncate max-w-[150px] text-gray-700 font-medium">{{ file.name }}</span>
-                            </div>
-                            <span class="text-green-500">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                            </span>
-                        </div>
-                    </div>
-                </div>
+                  {{ kb.name }}
+                </option>
+              </select>
             </div>
+            <button
+                type="button"
+                @click="refreshKnowledgePanel"
+                class="h-[34px] w-[34px] shrink-0 border border-[#D8D5C9] text-[#888780] hover:border-[#0F1115] hover:text-[#0F1115] flex items-center justify-center transition-colors"
+                title="Refresh knowledge base"
+                aria-label="Refresh knowledge base"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-15.74-6L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 15.74 6L21 16"/><path d="M16 16h5v5"/></svg>
+            </button>
+          </div>
 
-            <div class="bg-gray-100/80 p-1 rounded-xl flex items-center relative">
-                <div 
-                    class="absolute top-1 bottom-1 w-[48%] bg-white rounded-lg shadow-sm transition-all duration-300 ease-out z-0"
-                    :class="searchMode === 'document' ? 'left-1' : 'left-[51%]'"
-                ></div>
-
-                <button 
-                    @click="setMode('document')"
-                    :disabled="uploadedFiles.length === 0"
-                    class="flex-1 py-2 text-[10px] font-bold tracking-wide rounded-lg z-10 transition-colors duration-300 uppercase flex items-center justify-center gap-1.5"
-                    :class="[
-                        searchMode === 'document' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600',
-                        uploadedFiles.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
-                    ]"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
-                    Doc Only
-                </button>
-                <button 
-                    @click="setMode('hybrid')"
-                    class="flex-1 py-2 text-[10px] font-bold tracking-wide rounded-lg z-10 transition-colors duration-300 uppercase flex items-center justify-center gap-1.5"
-                    :class="searchMode === 'hybrid' ? 'text-purple-600' : 'text-gray-400 hover:text-gray-600'"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    Hybrid
-                </button>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="bg-[#F7F6F1] border border-[#E7E4D8] px-3 py-2.5">
+              <div class="text-[10px] text-[#888780] font-medium uppercase tracking-[0.16em]">Bases</div>
+              <div class="text-[22px] font-medium text-[#0F1115] font-mono mt-1.5">{{ knowledgeBases.length }}</div>
             </div>
-
-            <div class="border border-gray-100 rounded-xl bg-gray-50/80 overflow-hidden">
-                <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-                    <div>
-                        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Knowledge Store</div>
-                        <select
-                            v-model="activeKnowledgeBaseId"
-                            @change="loadKnowledgeDocuments"
-                            class="mt-1 max-w-[220px] bg-white border border-gray-100 rounded-lg px-2 py-1 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                        >
-                            <option
-                                v-for="kb in knowledgeBases"
-                                :key="kb.knowledge_base_id"
-                                :value="kb.knowledge_base_id"
-                            >
-                                {{ kb.name }}
-                            </option>
-                        </select>
-                    </div>
-                    <button
-                        @click="refreshKnowledgePanel"
-                        class="w-7 h-7 rounded-lg bg-white text-gray-400 hover:text-blue-600 hover:bg-blue-50 border border-gray-100 flex items-center justify-center transition-colors"
-                        title="Refresh knowledge base"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-                    </button>
-                </div>
-                <div class="p-3 space-y-2">
-                    <div class="grid grid-cols-2 gap-2">
-                        <div class="rounded-lg bg-white border border-gray-100 px-3 py-2">
-                            <div class="text-[10px] text-gray-400 font-bold uppercase">Bases</div>
-                            <div class="text-lg font-bold text-gray-800 leading-tight">{{ knowledgeBases.length }}</div>
-                        </div>
-                        <div class="rounded-lg bg-white border border-gray-100 px-3 py-2">
-                            <div class="text-[10px] text-gray-400 font-bold uppercase">Documents</div>
-                            <div class="text-lg font-bold text-gray-800 leading-tight">{{ knowledgeDocuments.length }}</div>
-                        </div>
-                    </div>
-                    <div class="max-h-28 overflow-y-auto space-y-1">
-                        <div v-if="knowledgeLoading" class="text-xs text-gray-400 px-1 py-2">Loading knowledge base...</div>
-                        <div v-else-if="knowledgeDocuments.length === 0" class="text-xs text-gray-400 px-1 py-2">No indexed documents yet.</div>
-                        <div
-                            v-for="doc in knowledgeDocuments.slice(0, 4)"
-                            :key="doc.document_id"
-                            class="flex items-center justify-between gap-2 rounded-lg bg-white border border-gray-100 px-2.5 py-2 text-xs"
-                        >
-                            <span class="truncate text-gray-600">{{ doc.original_filename || doc.filename }}</span>
-                            <span class="text-[10px] text-gray-400 shrink-0">{{ doc.chunk_count || 0 }} chunks</span>
-                        </div>
-                    </div>
-                    <div v-if="knowledgeError" class="text-[11px] text-red-500 px-1">{{ knowledgeError }}</div>
-                </div>
+            <div class="bg-[#F7F6F1] border border-[#E7E4D8] px-3 py-2.5">
+              <div class="text-[10px] text-[#888780] font-medium uppercase tracking-[0.16em]">Documents</div>
+              <div class="text-[22px] font-medium text-[#0F1115] font-mono mt-1.5">{{ knowledgeDocuments.length }}</div>
             </div>
+          </div>
 
-            <div>
-                <label class="mb-2 block text-xs font-bold text-gray-400 uppercase tracking-wider">Human Checkpoint</label>
-                <select
-                    v-model="hitlPauseBefore"
-                    :disabled="isLoading"
-                    class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
-                >
-                    <option value="">No pause</option>
-                    <option value="planner">Before planning</option>
-                    <option value="researcher">Before research</option>
-                    <option value="writer">Before writing</option>
-                    <option value="reviewer">Before review</option>
-                    <option value="refiner">Before refining</option>
-                </select>
-
-                <div class="relative group">
-                    <div class="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
-                    <textarea 
-                    v-model="query" 
-                    class="relative w-full p-4 bg-white border-0 rounded-xl shadow-inner text-gray-700 placeholder-gray-400 focus:ring-0 text-sm leading-relaxed resize-none transition-all"
-                    rows="3"
-                    placeholder="Enter research topic..."
-                    :disabled="isLoading"
-                    ></textarea>
-                </div>
-            
-                <button 
-                    @click="startResearch"
-                    :disabled="isLoading || !query"
-                    class="mt-4 w-full group relative overflow-hidden rounded-xl bg-gray-900 px-8 py-3.5 text-white shadow-lg transition-all hover:bg-gray-800 hover:shadow-xl hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
-                >
-                    <div class="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    <span class="relative flex items-center justify-center gap-2 font-medium tracking-wide text-xs uppercase">
-                        <span v-if="isLoading">Processing...</span>
-                        <span v-else>Initiate Research</span>
-                        <svg v-if="!isLoading" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                    </span>
-                </button>
-
-                <div v-if="hitlPause" class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                    <p class="text-xs font-semibold text-amber-900">Paused before {{ hitlPause.pause_node }}</p>
-                    <p class="mt-1 text-[11px] text-amber-700">{{ hitlPause.prompt }}</p>
-                    <textarea
-                        v-model="hitlInput"
-                        rows="3"
-                        class="mt-3 w-full resize-none rounded-lg border border-amber-200 bg-white p-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-200"
-                        placeholder="Add instructions, constraints, or evidence requirements..."
-                    ></textarea>
-                    <button
-                        @click="resumeResearch"
-                        :disabled="isLoading"
-                        class="mt-2 w-full rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
-                    >
-                        Continue research
-                    </button>
-                </div>
+          <div v-if="knowledgeLoading" class="text-xs text-[#888780] py-2 font-mono">Loading knowledge base...</div>
+          <div v-else-if="knowledgeDocuments.length === 0" class="text-xs text-[#888780] font-mono py-2">No indexed documents yet.</div>
+          <div v-else class="space-y-1 max-h-28 overflow-y-auto">
+            <div
+                v-for="doc in knowledgeDocuments.slice(0, 4)"
+                :key="doc.document_id"
+                class="flex items-center justify-between bg-white border border-[#E7E4D8] px-3 py-2 text-xs"
+            >
+              <span class="truncate text-[#3B3D43]">{{ doc.original_filename || doc.filename }}</span>
+              <span class="text-[10px] text-[#888780] shrink-0 font-mono">{{ doc.chunk_count || 0 }} chunks</span>
             </div>
-        </div>
+          </div>
+          <div v-if="knowledgeError" class="text-[11px] text-[#A32D2D] font-mono">{{ knowledgeError }}</div>
+        </section>
 
-        <StatusFlow :currentStep="currentStep" />
+        <!-- Human Checkpoint -->
+        <section class="bg-white border border-[#D8D5C9] p-5 space-y-3">
+          <div class="text-[10px] font-medium text-[#888780] uppercase tracking-[0.18em]">Human checkpoint</div>
+          <select
+              v-model="hitlPauseBefore"
+              :disabled="isLoading"
+              class="w-full bg-white border border-[#D8D5C9] px-3 py-2 text-[12px] font-medium text-[#0F1115] focus:outline-none focus:border-[#0F1115] disabled:opacity-50"
+          >
+            <option value="">No pause</option>
+            <option value="planner">Before planning</option>
+            <option value="researcher">Before research</option>
+            <option value="writer">Before writing / revising</option>
+            <option value="reviewer">Before review</option>
+            <option value="refiner">Before refining only</option>
+          </select>
 
-        <div class="rounded-2xl bg-[#0F172A] border border-slate-800 shadow-2xl overflow-hidden ring-1 ring-white/10">
-            <div class="flex items-center gap-1.5 px-4 py-2 bg-slate-900/50 border-b border-slate-800">
-                <div class="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
-                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></div>
-                <div class="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
-                <span class="ml-2 text-[10px] font-mono text-slate-500">terminal@amas-core:~</span>
+          <p class="text-[10px] leading-relaxed text-[#888780]">
+            “Before writing / revising” also pauses follow-up edits before the report is regenerated.
+          </p>
+
+          <textarea
+              v-model="query"
+              class="w-full px-3 py-3 bg-white border border-[#D8D5C9] text-[13px] text-[#0F1115] placeholder-[#888780] focus:outline-none focus:border-[#0F1115] resize-none leading-relaxed transition-colors"
+              rows="3"
+              placeholder="Enter research topic..."
+              :disabled="isLoading"
+          ></textarea>
+
+          <button
+              @click="startResearch"
+              :disabled="isLoading || !query"
+              class="w-full bg-[#0F1115] text-[#F7F6F1] py-3 text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[#3B3D43] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <span v-if="isLoading">Processing...</span>
+            <span v-else>Initiate Research →</span>
+          </button>
+
+          <div v-if="hitlPause" class="mt-3 border border-[#BA7517] bg-[#FAEEDA] p-3">
+            <p class="text-[11px] font-medium text-[#BA7517]">Paused before {{ hitlPause.pause_node }}</p>
+            <p class="mt-1 text-[10px] text-[#854F0B]">{{ hitlPause.prompt }}</p>
+            <textarea
+                v-model="hitlInput"
+                rows="3"
+                class="mt-2 w-full resize-none border border-[#BA7517] bg-white p-2 text-xs text-[#0F1115] focus:outline-none focus:border-[#854F0B]"
+                placeholder="Add instructions, constraints, or evidence requirements..."
+            ></textarea>
+            <button
+                @click="resumeResearch"
+                :disabled="isLoading"
+                class="mt-2 w-full bg-[#BA7517] text-white py-2 text-[11px] font-medium uppercase tracking-[0.1em] hover:bg-[#854F0B] disabled:opacity-50 transition-colors"
+            >
+              Continue research
+            </button>
+          </div>
+        </section>
+
+      </aside>
+
+      <!-- 右侧主区（核心：思维链顶部大尺寸 + 报告展示） -->
+      <div class="lg:col-span-8 flex flex-col gap-5 min-h-[700px]">
+        <!-- 工作流思维链（大尺寸横排，作为右侧主区核心展示） -->
+        <WorkflowChain :currentStep="currentStep" />
+
+        <!-- Researcher 内部 Agentic RAG 子流程 -->
+        <ResearchProcess
+            :events="researchEvents"
+            :active="isLoading && currentStep === 'researcher'"
+        />
+
+        <!-- 实时执行流：前端动作 + 后端 SSE 工作流事件 -->
+        <section class="border border-[#0F1115] overflow-hidden shadow-[4px_4px_0_#D8D5C9]" aria-label="Execution stream">
+          <div class="flex items-center justify-between gap-4 px-4 py-3 bg-[#0F1115] border-b border-[#3B3D43]">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="hidden sm:flex items-center gap-1.5 shrink-0" aria-hidden="true">
+                <span class="w-2 h-2 rounded-full bg-[#E24B4A]"></span>
+                <span class="w-2 h-2 rounded-full bg-[#EF9F27]"></span>
+                <span class="w-2 h-2 rounded-full bg-[#1D9E75]"></span>
+              </div>
+              <div class="min-w-0">
+                <h2 class="text-[11px] font-medium tracking-[0.18em] text-white uppercase">Execution stream</h2>
+                <p class="hidden sm:block mt-1 text-[10px] font-mono text-[#888780] truncate">FRONTEND ACTIONS · BACKEND WORKFLOW EVENTS</p>
+              </div>
             </div>
-            <div ref="logsContainer" class="h-32 p-4 overflow-y-auto font-mono text-[11px] leading-5 space-y-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                <div v-if="logs.length === 0" class="text-slate-600 italic">System ready. Waiting for input...</div>
-                <div v-for="(log, i) in logs" :key="i" class="flex gap-2">
-                    <span class="text-blue-500 shrink-0">➜</span>
-                    <span class="text-slate-300 break-all">{{ log }}</span>
-                </div>
-                <div v-if="isLoading" class="animate-pulse text-blue-500 mt-2">_</div>
+            <div class="flex items-center gap-3 shrink-0 font-mono text-[10px]">
+              <span class="text-[#888780]">{{ logs.length }} EVENTS</span>
+              <span
+                  class="inline-flex items-center gap-1.5 border px-2 py-1 tracking-[0.12em]"
+                  :class="isLoading ? 'border-[#5DCAA5] text-[#5DCAA5]' : 'border-[#5F5E5A] text-[#B4B2A9]'"
+              >
+                <span class="w-1.5 h-1.5 rounded-full" :class="isLoading ? 'bg-[#5DCAA5] animate-pulse' : 'bg-[#5F5E5A]'"></span>
+                {{ isLoading ? 'LIVE' : 'READY' }}
+              </span>
             </div>
-        </div>
-      </div>
-
-      <div class="lg:col-span-8 flex flex-col h-full min-h-[700px]">
-        <div class="flex-1 bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/40 p-8 lg:p-12 relative overflow-hidden flex flex-col">
-            
-            <div class="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
-                 <h1 class="text-9xl font-black font-sans" style="font-family: 'Orbitron';">AMAS</h1>
+          </div>
+          <div
+              ref="logsContainer"
+              class="h-40 sm:h-44 p-4 overflow-y-auto bg-[#0F1115] font-mono text-[11px] sm:text-[12px] leading-6 space-y-0.5 scrollbar-thin"
+              role="log"
+              aria-live="polite"
+          >
+            <div v-if="logs.length === 0" class="flex items-center gap-2 text-[#5F5E5A] italic">
+              <span class="text-[#5DCAA5]">›</span>
+              System ready. Waiting for input...
             </div>
-
-            <div v-if="!displayedReport && !isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-4">
-                <div class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-gray-100 to-gray-200 flex items-center justify-center shadow-inner">
-                    <svg class="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path></svg>
-                </div>
-                <div class="text-center">
-                    <h3 class="text-lg font-medium text-gray-900">Awaiting Assignment</h3>
-                    <p class="text-sm">Upload docs or enter a topic to begin.</p>
-                </div>
+            <div v-for="(log, i) in logs" :key="i" class="flex gap-3 border-l border-[#26282E] pl-3">
+              <span class="text-[#5DCAA5] shrink-0 select-none">{{ String(i + 1).padStart(2, '0') }}</span>
+              <span class="break-all" :class="logTone(log)">{{ log }}</span>
             </div>
-
-            <div v-else-if="isLoading && !displayedReport" class="flex-1 flex flex-col items-center justify-center relative">
-                <div class="relative w-40 h-40 flex items-center justify-center">
-                    <div class="absolute inset-0 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-full blur-[60px] opacity-60 animate-pulse"></div>
-                    
-                    <div class="absolute top-0 -left-4 w-24 h-24 bg-cyan-400 rounded-full blur-[40px] opacity-50 mix-blend-screen animate-blob"></div>
-                    <div class="absolute -bottom-4 -right-4 w-24 h-24 bg-indigo-500 rounded-full blur-[40px] opacity-50 mix-blend-screen animate-blob animation-delay-2000"></div>
-                    <div class="absolute -bottom-8 left-8 w-20 h-20 bg-purple-400 rounded-full blur-[40px] opacity-50 mix-blend-screen animate-blob animation-delay-4000"></div>
-
-                    <div class="relative z-10 w-3 h-3 bg-white rounded-full shadow-[0_0_20px_rgba(255,255,255,0.8)] animate-ping" style="animation-duration: 2s;"></div>
-                </div>
-
-                <div class="mt-12 text-center space-y-2 relative z-10">
-                    <h3 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600 tracking-widest animate-pulse">
-                        THINKING
-                    </h3>
-                    <p class="text-xs text-slate-400 font-mono uppercase tracking-[0.2em]">
-                        Analyze & Plan Strategy...
-                    </p>
-                </div>
+            <div v-if="isLoading" class="flex items-center gap-2 text-[#5DCAA5] mt-1">
+              <span class="animate-pulse">●</span>
+              <span class="animate-pulse">Listening for workflow events...</span>
             </div>
+          </div>
+        </section>
 
-            <div v-else class="prose prose-slate max-w-none prose-headings:font-display prose-headings:font-bold prose-headings:tracking-tight prose-a:text-blue-600 prose-img:rounded-xl">
-                <div v-html="renderedReport"></div>
-                <span v-if="isTyping" class="inline-block w-2 h-5 bg-blue-600 ml-1 animate-pulse align-middle"></span>
+        <!-- 报告展示区（thinking / markdown 渲染） -->
+        <div class="flex-1 bg-white border border-[#D8D5C9] p-8 lg:p-10 min-h-[460px] flex flex-col">
+          <div v-if="!displayedReport && !isLoading" class="flex-1 flex flex-col items-center justify-center text-[#888780] space-y-4">
+            <svg width="46" height="54" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="1.2" class="text-[#B4B2A9]">
+              <path d="M5 1h9l5 5v21H5z"/><path d="M14 1v5h5"/>
+            </svg>
+            <div class="text-center">
+              <h3 class="text-[15px] font-medium text-[#0F1115]">Awaiting Assignment</h3>
+              <p class="text-[12px] mt-1">Enter a research topic to begin.</p>
             </div>
+          </div>
 
+          <div v-else-if="isLoading && !displayedReport" class="flex-1 flex flex-col items-center justify-center relative">
+            <div class="relative w-24 h-24 flex items-center justify-center">
+              <div class="absolute inset-0 border border-[#0F1115] animate-ping opacity-40"></div>
+              <div class="absolute inset-3 border border-[#0F1115] animate-pulse opacity-60"></div>
+              <div class="w-3 h-3 bg-[#0F1115]"></div>
+            </div>
+            <div class="mt-8 text-center">
+              <h3 class="text-[13px] font-medium tracking-[0.2em] uppercase text-[#0F1115] animate-pulse">Thinking</h3>
+              <p class="text-[11px] text-[#888780] font-mono mt-1">ANALYZE &amp; PLAN STRATEGY...</p>
+            </div>
+          </div>
+
+          <div v-else class="prose prose-slate max-w-none prose-headings:font-display prose-headings:font-bold prose-headings:tracking-tight prose-a:text-blue-600 prose-img:rounded-xl">
+            <div v-html="renderedReport"></div>
+            <span v-if="isTyping" class="inline-block w-2 h-4 bg-[#0F1115] ml-1 animate-pulse align-middle"></span>
+          </div>
         </div>
       </div>
 
@@ -313,7 +321,8 @@
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue';
 import { uploadFiles, streamChat, resumeChat, clearContext, getOrCreateSessionId, getCurrentSessionId, clearSession, getSessionInfo, listKnowledgeBases, listKnowledgeBaseDocuments } from './services/api';
-import StatusFlow from './components/StatusFlow.vue';
+import WorkflowChain from './components/WorkflowChain.vue';
+import ResearchProcess from './components/ResearchProcess.vue';
 import MarkdownIt from 'markdown-it';
 // 【修复步骤 1】引入数学公式插件 (必须先 npm install markdown-it-katex)
 import mk from 'markdown-it-katex';
@@ -355,6 +364,7 @@ const knowledgeError = ref('');
 const hitlPauseBefore = ref('');
 const hitlPause = ref(null);
 const hitlInput = ref('');
+const researchEvents = ref([]);
 
 // 打字机变量
 const displayedReport = ref('');
@@ -422,6 +432,7 @@ async function handleNewSession() {
   sessionTurnCount.value = 0;
   sessionHistory.value = null;
   displayedReport.value = '';
+  researchEvents.value = [];
   logs.value = [];
   logs.value.push(`[SESSION] New session: ${sessionId.value}`);
 }
@@ -434,6 +445,34 @@ function handleSessionEvent(data) {
   if (data.window_stats) {
     logs.value.push(`[SESSION] Turn #${data.turn_number} | Window K=${data.window_stats.window_k} | ` +
       `Episodic: ${data.window_stats.episodic_count}, Semantic: ${data.window_stats.semantic_count}`);
+  }
+}
+
+function handleResearchProgress(event) {
+  const previousPass = researchEvents.value.at(-1)?.pass || 0;
+  const pass = event.stage === 'initialize' && event.status === 'running'
+    ? previousPass + 1
+    : Math.max(1, previousPass);
+  const normalizedEvent = { ...event, pass };
+
+  researchEvents.value = [...researchEvents.value, normalizedEvent].slice(-100);
+  currentStep.value = 'researcher';
+
+  const round = normalizedEvent.iteration || 1;
+  const label = normalizedEvent.label || normalizedEvent.stage || 'Research';
+  const details = normalizedEvent.details || {};
+  let metric = '';
+  if (Number.isFinite(Number(details.candidate_count))) metric = ` · ${details.candidate_count} candidates`;
+  else if (Number.isFinite(Number(details.evidence_count))) metric = ` · ${details.evidence_count} evidence`;
+  else if (Number.isFinite(Number(details.query_count))) metric = ` · ${details.query_count} queries`;
+  else if (typeof details.sufficient === 'boolean') metric = details.sufficient ? ' · sufficient' : ' · gap found';
+
+  if (normalizedEvent.status === 'running') {
+    logs.value.push(`[RAG P${pass}/R${round}] → ${label}: ${normalizedEvent.message || 'Running'}${metric}`);
+  } else if (normalizedEvent.status === 'completed') {
+    logs.value.push(`[RAG P${pass}/R${round}] ✓ ${label}${metric} · ${normalizedEvent.duration_ms || 0}ms`);
+  } else if (normalizedEvent.status === 'failed') {
+    logs.value.push(`[RAG P${pass}/R${round}] ! ${label} failed: ${normalizedEvent.error || 'Unknown error'}`);
   }
 }
 
@@ -457,6 +496,16 @@ const renderedReport = computed(() => {
     // 3. 渲染
     return md.render(raw);
 });
+
+// 执行流按事件类型着色，便于快速定位警告、错误和完成节点。
+const logTone = (log) => {
+    if (log.startsWith('[ERROR]') || log.includes('FAILED') || log.includes('terminated')) return 'text-[#F09595]';
+    if (log.startsWith('[HITL]') || log.startsWith('[QA]')) return 'text-[#FAC775]';
+    if (log.startsWith('[RAG')) return 'text-[#5DCAA5]';
+    if (log.startsWith('[DONE]')) return 'text-[#5DCAA5]';
+    if (log.startsWith('[PLANNER]') || log.startsWith('[RESEARCHER]') || log.startsWith('[WRITER]') || log.startsWith('[REFINER]')) return 'text-[#85B7EB]';
+    return 'text-[#E7E4D8]';
+};
 
 const scrollToBottom = async () => {
     await nextTick();
@@ -531,6 +580,7 @@ const startResearch = async () => {
     logs.value = []; 
     logs.value.push(`[INIT] System initialized. Mode: ${searchMode.value.toUpperCase()}`);
     displayedReport.value = '';
+    researchEvents.value = [];
     hitlPause.value = null;
     hitlInput.value = '';
     
@@ -554,6 +604,12 @@ const startResearch = async () => {
             query.value,
             actualMode,
             (data) => {
+                    if (data.step === '__research_progress__') {
+                        handleResearchProgress(data.data);
+                        scrollToBottom();
+                        return;
+                    }
+
                     if (data.step === '__hitl_pause__') {
                         hitlPause.value = data.data;
                         currentStep.value = 'paused';
@@ -672,6 +728,12 @@ const resumeResearch = async () => {
         hitlPause.value.thread_id,
         hitlInput.value,
         (data) => {
+            if (data.step === '__research_progress__') {
+                handleResearchProgress(data.data);
+                scrollToBottom();
+                return;
+            }
+
             if (data.step === '__hitl_pause__') {
                 hitlPause.value = data.data;
                 isLoading.value = false;
