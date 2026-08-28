@@ -14,8 +14,9 @@ AMAS 将任务规划、Agentic RAG、内容生成、质量审查和多轮修改�
 [![Vue.js](https://img.shields.io/badge/Vue.js-3.5-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker_Compose-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-www.iflowcc.xyz-00C2A8?style=flat-square&logo=cloudflare&logoColor=white)](https://www.iflowcc.xyz)
 
-[核心能力](#features) · [工作原理](#workflow) · [界面预览](#preview) · [快速开始](#quick-start) · [项目结构](#project-structure)
+[核心能力](#features) · [工作原理](#workflow) · [界面预览](#preview) · [在线体验](#live) · [快速开始](#quick-start) · [项目结构](#project-structure)
 
 </div>
 
@@ -29,6 +30,18 @@ AMAS 不是一次性调用大模型的聊天页面，而是一套围绕「研究
 
 - **研究过程可见**：不仅展示主 Agent 到了哪个节点，还会展开 Research Agent 内部的 Agentic RAG 子流程、候选数量、证据数量、迭代轮次与耗时。
 - **结果生成可控**：支持 Document Only / Hybrid 检索策略、写作前暂停、多轮追问与报告定向改写，并通过 Reviewer 形成质量闭环。
+
+---
+
+<a id="live"></a>
+
+## 🌐 在线体验
+
+不想本地部署？可直接访问线上体验地址，开箱即用，与本地部署功能完全一致：
+
+👉 **[https://www.iflowcc.xyz](https://www.iflowcc.xyz)**
+
+线上版本支持上传 PDF、选择检索模式、实时观察 Agentic RAG 全链路过程并生成结构化研究报告。如需自托管，请参考下方的「快速开始」。
 
 ---
 
