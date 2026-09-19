@@ -562,6 +562,147 @@ def research_node(state: AgentState) -> dict[str, Any]:
     }
 
 
+# =============================================================================
+# S8 — 检索执行 DAG 化（骨架）
+# =============================================================================
+# 【这一步要解决什么】
+# 现状是"先跑完所有本地关键词，再跑完所有网络关键词"的**串行 for 循环**
+# （retrieve_local :270-291 + retrieve_web :299-320）。问题：
+#   · 一条慢一条快也只能排队；
+#   · 某条失败只打一行 warning，状态不落库；
+#   · 用户无法选择"第 3 条不用查了"。
+#
+# 【改造后】按 DAG 扇出并发 + 扇入，单任务失败隔离。
+#
+# 【★ 面试要点：为什么不用 LangGraph 的 Send API 做并行（决策 D3 = a）】
+#   ① Send 需要给每一个被并行的 state key 配 reducer，否则并发写会互相覆盖；
+#   ② 并行会让 checkpoint 的序列化负担显著上升（本项目每轮都落 SQLite）；
+#   ③ 并行子图里 interrupt() 的行为会变复杂，会破坏 S9 的计划确认点。
+#   改为**节点内 asyncio.gather**：并行度对 LangGraph 不透明，
+#   但已经通过 SSE 事件完整暴露给前端，可观测性没有损失。
+#
+# 【⚠️ 与旧实现的唯一行为差异（全局风险 R1）】
+#   并发之后工具调用顺序天然不确定 →
+#   test_researcher_tool_registry.py:78-82 的**顺序断言必须改成集合断言**。
+#   这是整个 S8 唯一无法保持行为等价的地方，commit message 里要注明。
+# =============================================================================
+
+
+def _ensure_tasks(state: ResearchState) -> list[dict]:
+    """没有结构化计划时，按 active_queries 退化构造 DAG（保证回退路径也能跑）。
+
+    这是 S7 的"回退分支"能成立的关键：当 LLM 输出的 JSON 解析失败
+    （_parse_plan 返回空 search_tasks），检索阶段不会因此停摆，
+    而是按关键词重新组装一份"全部串行"的计划。
+
+    【实现要点】
+      1. `state.get("search_tasks")` 非空 → 直接用它（正常路径）
+      2. 否则按 active_queries 造 rag.retrieve_candidates 任务
+         （active_queries 也没有时用 [state["query"]] 兜底）
+      3. 非 document 模式时，再追加一批 web.retrieve_candidates 任务
+      4. 交给 `dag.assemble(raw)` 补 id / 依赖 / 初始状态
+    """
+    pass  # TODO(S8): 按上面 4 步实现
+
+
+async def run_search_tasks(
+    state: ResearchState,
+    progress_writer: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """按 DAG 并发执行检索子任务；单任务失败隔离，不影响整体。
+
+    【调度循环长什么样】
+      while True:
+          runnable = dag.ready(tasks)        # 本轮所有就绪任务
+          if not runnable: break             # 没有就绪任务 = 跑完了（或全部阻塞）
+          扇出：asyncio.gather(*(_run_one(...) for task in runnable), return_exceptions=True)
+          扇入：逐个回写 status / results
+             · 抛异常 → task["status"] = dag.FAILED + 记 error（失败隔离，不中断循环）
+             · 正常   → task["status"] = dag.SUCCEEDED + 结果进 search_task_results
+
+    【document 模式的处理】
+    先遍历一遍，把 web.retrieve_candidates 任务判成 dag.CANCELED
+    （是 canceled 不是 failed —— 用户视角是"跳过"，不是"出错了"）。
+    这样 dag.ready() 自然就不会下发它们，per-task 的条件判断也不需要。
+
+    【★ 全局风险 R2：asyncio.to_thread 不能漏】
+    ToolRuntime 内部虽然有 ThreadPoolExecutor，但那个池是**每次调用新建并
+    shutdown(wait=False)** 的；如果直接同步调用 executor.call，整个 gather 会退化成串行
+    —— 表现为"性能回退但完全不报错"，最难发现。
+    所以 `_run_one` 里必须用 `await asyncio.to_thread(executor.call, ...)` 包一层。
+    单测会用"两条 0.2s 任务总耗时 < 0.35s"来守住这个不变性。
+
+    【返回】
+    `{"search_tasks": ..., "search_task_results": ..., "tool_runs": executor.runs}`
+    """
+    pass  # TODO(S8): 按上面的调度循环实现
+
+
+async def _run_one(executor: Any, task: dict, state: ResearchState) -> list[dict[str, Any]]:
+    """执行单个检索子任务，把原始结果转成统一的候选结构。
+
+    【两种工具的返回形状不同，要在这里归一】
+      · rag.retrieve_candidates → 一批 document 对象，用既有的 `_local_candidate()` 转候选
+      · web.retrieve_candidates → 一批 dict，用既有的 `_web_candidate()` 转候选
+
+    【必须用 asyncio.to_thread 包住 executor.call】原因见上面 R2 的说明。
+    """
+    pass  # TODO(S8): 按工具名分支，转成候选列表返回
+
+
+def _retrieve_node(state: ResearchState) -> dict[str, Any]:
+    """把异步的 run_search_tasks 包成同步节点（子图目前是 .invoke() 调用的）。
+
+    【★ 全局风险 R3：asyncio.run() 在已有事件循环里会抛 RuntimeError】
+    当前子图是 `.invoke()` 同步调用（见 research_node 末尾），所以 asyncio.run 是安全的。
+    **如果后续把子图改成 `.ainvoke()`，这里必须改成 `await run_search_tasks(...)`**，
+    不能保留 asyncio.run —— 否则一跑就炸。
+
+    【扇入后要按工具类型分桶】
+    结果的最终形态仍要保持 `local_candidates` / `web_candidates` 两个 key，
+    因为下游 fuse_candidates 以及既有测试都按这两个桶读数据。
+    """
+    pass  # TODO(S8): asyncio.run(run_search_tasks(...)) → 分桶 → 返回四个 key
+
+
+def _tool_progress_sink(progress_writer: Callable[[dict[str, Any]], None] | None):
+    """把工具级进度包装成既有的 research_progress 事件结构（S4）。
+
+    【复用同一个 kind/stage/status 字段 → 前端 Execution Stream 一行都不用改】
+    工具级事件的 stage 名建议统一加 `tool.` 前缀（如 `tool.retrieve_local`），
+    避免与节点级那 7 个 stage 撞名 —— 撞名会打破
+    test_researcher_tool_registry.py 里对 completed_stages 的集合断言。
+
+    【为什么这里能安全地回调 progress_writer】
+    因为 sink 是在 ToolExecutor 里被调用的，而 ToolExecutor.call() 跑在**主线程**
+    （工具本身跑在子线程，但进度是通过返回值交回主线程再回放的）——
+    这正是决策 D2 选"返回值回放"而不是"子线程直接回调"的原因。
+    """
+    pass  # TODO(S4): 返回一个 (stage, message, progress, details) -> None 的闭包
+
+
+# ---------------------------------------------------------------------------
+# S8 待接线清单（Demo 阶段：编排函数为骨架，子图拓扑尚未调整）
+# ---------------------------------------------------------------------------
+# ① 子图拓扑（_build_research_graph，原 :481-503）：
+#      把 retrieve_local + retrieve_web **两个节点合并为一个 `retrieve` 节点**，
+#      因为"本地还是网络"现在由 DAG 自己决定，不再需要 route_after_local 条件边。
+#        workflow.add_node("retrieve", _tracked_stage("retrieve", _retrieve_node, writer))
+#        workflow.add_edge("initialize", "retrieve")   # 原来的条件边消失
+#        workflow.add_edge("refine_query", "retrieve") # 回边指向合并后的节点
+#      → route_after_local（原 :294-296）随之删除。
+#      ⚠️ 这会打破 test_researcher_tool_registry.py:171-184
+#         （它断言 mermaid 里必须出现 retrieve_local / retrieve_web 两个节点名），
+#         必须同步把断言改成 `retrieve` 并在 commit message 里说明。
+#
+# ② 保留旧实现以便一键回滚（S8 是唯一有实质行为变更的 Sprint）：
+#        def _build_research_graph_legacy(...):   # 原实现原样保留
+#    并加一个配置开关 `planner_dag_enabled: bool = True`，出问题可退回串行实现。
+#
+# ③ S3 的三处收敛（executor 替换 ToolRuntime 直调）也在这里一并完成，
+#    清单见 app/tools/executor.py 文件末尾。
+
+
 if __name__ == "__main__":
     # 路径引导已由模块顶部完成（sys.path 已包含 backend 根目录），
     # 因此顶层的 `from app...` 导入和这里的运行都能直接解析。
