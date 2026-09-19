@@ -25,7 +25,7 @@ from uuid import uuid4
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.harness.registry import HarnessTool, get_harness_node
-from app.tools.registry import ToolContext, ToolRegistry, get_tool_registry
+from app.tools.registry import ToolContext, ToolRegistry, ToolSpec, get_tool_registry
 
 
 logger = get_logger("iris.tools.runtime")
@@ -98,8 +98,25 @@ class ToolRuntime:
         input_summary: str = "",
         metadata: dict[str, Any] | None = None,
     ) -> ToolRuntimeResult:
-        """按注册名执行工具：自动补全工具元数据（版本/描述/标签/出入参 schema）。"""
+        """按注册名执行工具：先注入服务端权威参数，再自动补全工具元数据。
+
+        执行顺序（顺序不能调换）：
+          1. 取 ToolSpec；
+          2. ★ 服务端注参：把 state 里的权威参数盖进 payload（S2）；
+          3. 拼装追踪元数据（版本/描述/标签/出入参 schema）；
+          4. 交给 run() 执行（超时 + 重试 + 快照）。
+        """
         spec = self._registry.get(tool_name)
+        # state 有两个用途，必须用同一份值：
+        #   ① 服务端注参的数据源（第 2 步）
+        #   ② 透传给 handler 的 ToolContext.state（第 4 步）
+        # 若用两个不同的值，会出现"注参取自 A、handler 看到的却是 B"的诡异不一致。
+        effective_state = state or {}
+
+        # ★ S2：模型看不到 server_filled 字段，所以这里不是"防覆盖"而是"唯一来源"——
+        # 即便模型（或上游调用方）硬塞了一个同名字段，也一律以 state 为准。
+        effective_payload = self._apply_server_filled(spec, payload, effective_state)
+
         # 把工具定义信息拼进追踪元数据，日志里能看到"这次调用的是哪个版本、什么工具"
         effective_metadata = {
             "tool_version": spec.version,
@@ -114,11 +131,50 @@ class ToolRuntime:
         return self.run(
             tool_name,
             spec.handler,
-            payload,
-            ToolContext(node_name=self.node_name, state=state or {}),
-            input_summary=input_summary or payload,
+            effective_payload,
+            ToolContext(node_name=self.node_name, state=effective_state),
+            # 用注入后的 payload 做摘要：日志要反映"实际执行时用的是什么参数"
+            input_summary=input_summary or effective_payload,
             metadata=effective_metadata,
         )
+
+    def _apply_server_filled(
+        self,
+        spec: ToolSpec,
+        payload: dict[str, Any],
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        """把 ``spec.server_filled`` 声明的权威参数从 state 注入 payload（S2）。
+
+        为什么需要这一步：
+        像 ``knowledge_base_id`` 这种参数决定了"这次检索哪个知识库"，属于安全边界。
+        它被排除在 params 模型之外（模型在 function schema 里根本看不到它），
+        但"模型看不到"并不等于"服务端填得上" —— 必须有机制把真值补进去，
+        否则 handler 只能拿到空值，一路退化到 ``kb_default``。
+
+        两条行为约定：
+        - **state 里有值就覆盖**（哪怕 payload 里已经有同名字段）：
+          state 是权威来源，模型若硬塞一个假 id 也一律作废；
+        - **state 里没有（或为 None）就什么都不做**：
+          不凭空造值，也不删除 payload 里已有的字段 ——
+          保持"未提供"和"显式传 None 之外的其它值"语义不变，
+          免得破坏绕过 runtime 直接调 handler 的路径。
+        """
+        # 未声明服务端注入参数的工具：零开销直接返回原 payload
+        if not spec.server_filled:
+            return payload
+
+        filled = dict(payload)  # 复制一份，不改动调用方传入的原对象
+        for key in spec.server_filled:
+            value = state.get(key)
+            if value is not None:
+                filled[key] = value
+                logger.debug(
+                    "工具 %s 的服务端注入参数已覆盖：%s（来源：图状态）",
+                    spec.name,
+                    key,
+                )
+        return filled
 
     def run(
         self,

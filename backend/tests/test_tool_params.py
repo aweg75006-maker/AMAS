@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.tools.registry import ToolRegistry, ToolSpec
 from app.tools.research_tools import register_research_tools
+from app.tools.runtime import ToolRuntime
 from app.tools.schemas import RagRelevanceGradeIn, RagRetrieveIn, WebSearchIn
 from app.tools.validation import InvalidToolParams, validate_params
 
@@ -157,3 +158,106 @@ def test_knowledge_base_id_is_not_exposed_to_the_model():
     for hidden in spec.server_filled:
         assert hidden not in properties
         assert hidden not in required
+
+
+# ---------------------------------------------------------------------------
+# 4. 服务端注参（S2）：模型看不到的参数，由 state 权威注入
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_injects_server_filled_params_from_state():
+    """模型传了个假库 id，服务端必须用 state 里的真值覆盖掉。
+
+    这是 S2 的核心断言：即使调用方（或模型）硬塞 ``kb_attacker``，
+    handler 实际收到的也必须是 state 里的 ``kb_official``。
+    """
+    registry = ToolRegistry()
+    seen: dict = {}
+    registry.register(
+        ToolSpec(
+            name="unit.filled",
+            handler=lambda payload, context: seen.update(payload) or "ok",
+            params=RagRetrieveIn,
+            server_filled=("knowledge_base_id",),
+        )
+    )
+    runtime = ToolRuntime(node_name="researcher", registry=registry)
+
+    result = runtime.run_registered(
+        "unit.filled",
+        {"query": "q", "knowledge_base_id": "kb_attacker"},
+        state={"knowledge_base_id": "kb_official"},
+    )
+
+    assert result.ok is True
+    assert seen["knowledge_base_id"] == "kb_official"
+
+
+def test_runtime_leaves_missing_state_value_untouched():
+    """state 里没有该字段时不要去凭空造一个。
+
+    注意：这里断言的是"注入环节不插手"，payload 里本来没有就不该被加上；
+    至于 handler 侧的默认值兜底属于 handler 自己的职责，不在本测试范围。
+    """
+    registry = ToolRegistry()
+    seen: dict = {}
+    registry.register(
+        ToolSpec(
+            name="unit.filled",
+            handler=lambda payload, context: seen.update(payload) or "ok",
+            server_filled=("knowledge_base_id",),
+        )
+    )
+    ToolRuntime(node_name="researcher", registry=registry).run_registered(
+        "unit.filled",
+        {"query": "q"},
+        state={},
+    )
+    assert "knowledge_base_id" not in seen
+
+
+def test_runtime_does_not_touch_payload_for_tools_without_server_filled():
+    """未声明 server_filled 的工具：连复制都不做，直接返回原对象（零开销）。"""
+    registry = ToolRegistry()
+    registry.register(
+        ToolSpec(name="unit.plain", handler=lambda payload, context: "ok")
+    )
+    runtime = ToolRuntime(node_name="researcher", registry=registry)
+    payload = {"query": "q"}
+
+    returned = runtime._apply_server_filled(
+        registry.get("unit.plain"), payload, {"knowledge_base_id": "kb_x"}
+    )
+
+    assert returned is payload  # 同一个对象，说明确实没做多余处理
+
+
+def test_server_filled_injection_does_not_touch_metadata():
+    """注入只改 payload，不能动 metadata —— test_tool_registry.py 直接断言了它。
+
+    这里刻意用桩工具而不是真实研究工具：真实 handler 会发网络请求，
+    单测不该依赖外部服务。
+    """
+    registry = ToolRegistry()
+    registry.register(
+        ToolSpec(
+            name="unit.meta",
+            handler=lambda payload, context: "ok",
+            input_schema="query:string",
+            output_schema="content:string",
+            params=RagRetrieveIn,
+            server_filled=("knowledge_base_id",),
+        )
+    )
+    runtime = ToolRuntime(node_name="researcher", registry=registry)
+
+    result = runtime.run_registered(
+        "unit.meta",
+        {"query": "q"},
+        state={"knowledge_base_id": "kb_official"},
+    )
+
+    assert result.ok is True
+    # 入参 schema 仍是注册时声明的那一份，说明 metadata 拼装逻辑没被注入步骤影响
+    assert result.run.metadata["input_schema"] == "query:string"
+    assert result.run.metadata["output_schema"] == "content:string"

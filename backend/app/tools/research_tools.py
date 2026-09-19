@@ -95,7 +95,17 @@ def register_research_tools(registry: ToolRegistry) -> None:
 
 
 def _rag_retrieve(payload: dict[str, Any], context: ToolContext):
-    """本地知识库直接检索：返回最相关的文档（用于"仅文档"等需要精确结果的场景）。"""
+    """本地知识库直接检索：返回最相关的文档（用于"仅文档"等需要精确结果的场景）。
+
+    关于 ``knowledge_base_id``（S2）：
+    该字段已在 ``ToolSpec.server_filled`` 中声明，正常情况下由 ``ToolRuntime``
+    从图状态注入到 payload 里，模型在 function schema 中看不到它。
+
+    这里仍然用 ``payload.get(...) or "kb_default"`` 兜底，**不能改成
+    ``payload["knowledge_base_id"]``** —— 因为存在绕过 runtime 的直接调用路径
+    （例如测试里注册假 handler、或别处直接复用这个函数），
+    改成硬取值会让这些路径抛 KeyError。
+    """
     query = payload["query"]
     knowledge_base_id = payload.get("knowledge_base_id", "kb_default")
     retriever = get_retriever(knowledge_base_id=knowledge_base_id)
@@ -106,7 +116,11 @@ def _rag_retrieve(payload: dict[str, Any], context: ToolContext):
 
 
 def _rag_retrieve_candidates(payload: dict[str, Any], context: ToolContext):
-    """本地知识库广召回：稠密 + BM25 双通道取候选，交给后续全局重排（取 top-k）。"""
+    """本地知识库广召回：稠密 + BM25 双通道取候选，交给后续全局重排（取 top-k）。
+
+    ``knowledge_base_id`` 的处理方式与 ``_rag_retrieve`` 一致：runtime 负责注入，
+    这里保留默认值兜底以兼容直接调用路径。
+    """
     return get_candidate_documents(
         payload["query"],
         knowledge_base_id=payload.get("knowledge_base_id", "kb_default"),
