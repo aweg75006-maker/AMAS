@@ -25,3 +25,6 @@ package-lock.json
 frontend/package-lock.json
 memory_graph.html
 dump.rdb
+# pytest 临时目录（沙箱下系统 TMPDIR 不可写，改用项目内目录）
+.pytest_tmp/
+backend/.pytest_tmp/
