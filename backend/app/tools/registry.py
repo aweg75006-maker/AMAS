@@ -17,6 +17,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+
 from app.core.exceptions import ConfigurationError
 
 
@@ -44,10 +46,28 @@ class ToolSpec:
     name:          工具唯一名称（形如 "rag.retrieve"），注册后按此查找；
     handler:       实际执行函数；
     description:   人类可读描述（可注入提示词，让模型知道何时调用）；
-    input_schema:  入参说明（形如 "query:string, knowledge_base_id:string"）；
+    input_schema:  入参说明（形如 "query:string, knowledge_base_id:string"）。
+                   注意：这是**给人看 / 给 Harness manifest 对照用的说明字符串**，
+                   不是机器校验依据（机器校验请用下面的 params），两者不要混淆；
     output_schema: 出参说明；
     version:       工具版本（写入运行追踪元数据）；
-    tags:          标签集合，用于按类别检索/过滤工具。
+    tags:          标签集合，用于按类别检索/过滤工具；
+    params:        ★ S1 新增。参数模型（Pydantic BaseModel 子类）。
+                   一份模型同时驱动两件事：
+                     ① 服务端校验：app/tools/validation.py 的 validate_params()
+                     ② LLM function schema：convert_to_openai_function() 生成工具签名
+                   两者同源，所以永远不会漂移。
+                   为 None 表示"这个工具还没迁移到模型校验"，此时校验环节原样放行
+                   （保证新老工具可以共存，不必一次性改完所有工具才能启动）；
+    server_filled: ★ S1 新增（S2 生效）。服务端注入的参数名列表，例如
+                   ("knowledge_base_id",)。这些参数**不能写进 params 模型**，
+                   否则会出现在模型可见的 function schema 里 ——
+                   模型就有机会编造一个不属于本次会话的知识库 id。
+                   运行时由 app/tools/runtime.py 从图状态注入。
+
+    关于 frozen=True：本类要求可哈希（会被放进集合/字典），
+    所以新增字段的类型也必须是可哈希的 —— type[BaseModel] 是类对象、tuple[str, ...] 是元组，
+    两者都可哈希，不会破坏 dataclass 自动生成的 __hash__。
     """
 
     name: str
@@ -57,6 +77,11 @@ class ToolSpec:
     output_schema: str = ""
     version: str = "v1"
     tags: tuple[str, ...] = ()
+    # ↓ 以下两个字段必须带默认值、且排在末尾 ——
+    #   现有构造点（tests/test_tool_registry.py、tests/test_researcher_tool_registry.py）
+    #   只传 name/handler，中间插字段会让它们全部报 "unexpected keyword"/"missing positional"。
+    params: type[BaseModel] | None = None
+    server_filled: tuple[str, ...] = ()
 
 
 class ToolRegistry:

@@ -17,20 +17,32 @@ from typing import Any
 
 from app.rag.engine import get_candidate_documents, get_retriever
 from app.tools.registry import ToolContext, ToolRegistry, ToolSpec
+from app.tools.schemas import RagRelevanceGradeIn, RagRetrieveIn, WebSearchIn
 from app.tools.search import search_tavily, search_tavily_candidates
 from app.utils.llm import get_llm
 
 
 def register_research_tools(registry: ToolRegistry) -> None:
-    """把研究类工具注册进指定注册表（幂等，供全局注册表初始化调用）。"""
+    """把研究类工具注册进指定注册表（幂等，供全局注册表初始化调用）。
+
+    每条注册声明都带三类信息，各自的作用：
+    - ``input_schema`` / ``output_schema``：给人看的说明字符串，同时被 Harness manifest 对照；
+    - ``params``：机器可校验的参数模型（S1 新增），驱动服务端校验 + LLM function schema；
+    - ``server_filled``：服务端注入参数（S1 声明，S2 生效），从 function schema 里剔除，
+      模型看不到、也不许传。
+    """
     registry.register(
         ToolSpec(
             name="rag.retrieve",
             handler=_rag_retrieve,
             description="Retrieve relevant local knowledge-base documents.",
+            # 字符串说明保留：Harness manifest 要对照、人也需要一眼看懂参数
             input_schema="query:string, knowledge_base_id:string",
             output_schema="documents:list",
             tags=("rag", "knowledge_base"),
+            # 机器校验用的模型：只声明 query，knowledge_base_id 走下面的 server_filled
+            params=RagRetrieveIn,
+            server_filled=("knowledge_base_id",),
         )
     )
     registry.register(
@@ -41,6 +53,9 @@ def register_research_tools(registry: ToolRegistry) -> None:
             input_schema="query:string, knowledge_base_id:string",
             output_schema="documents:list",
             tags=("rag", "knowledge_base", "candidates"),
+            # 入参形状与 rag.retrieve 完全一致，复用同一个模型
+            params=RagRetrieveIn,
+            server_filled=("knowledge_base_id",),
         )
     )
     registry.register(
@@ -51,6 +66,8 @@ def register_research_tools(registry: ToolRegistry) -> None:
             input_schema="query:string, document_context:string",
             output_schema="sufficient:boolean, coverage_gap:string, follow_up_queries:list[string]",
             tags=("rag", "llm", "grader"),
+            # 这个工具的入参完全由 Researcher 节点内部构造，没有服务端注入参数
+            params=RagRelevanceGradeIn,
         )
     )
     registry.register(
@@ -61,6 +78,7 @@ def register_research_tools(registry: ToolRegistry) -> None:
             input_schema="query:string",
             output_schema="candidates:list",
             tags=("web", "search", "candidates"),
+            params=WebSearchIn,
         )
     )
     registry.register(
@@ -71,6 +89,7 @@ def register_research_tools(registry: ToolRegistry) -> None:
             input_schema="query:string",
             output_schema="content:string",
             tags=("web", "search"),
+            params=WebSearchIn,
         )
     )
 
