@@ -71,6 +71,48 @@ class ToolRunSnapshot:
         }
 
 
+@dataclass(frozen=True)
+class ToolProgress:
+    """工具在返回结果时携带的一条进度记录（S4）。
+
+    【为什么用"返回值回放"而不是回调（决策 D2 = a）】
+    工具是同步函数，跑在 ``_run_with_timeout`` 的 ThreadPoolExecutor 子线程里；
+    而 SSE 的 ``progress_writer`` 属于主事件循环。
+    在子线程里直接回调会跨线程碰 asyncio loop —— 所以让工具把进度**攒进返回值**，
+    由 ``ToolExecutor`` 在**主线程**逐条回放。
+
+    前端能看到的粒度因此从"检索中"下沉到
+    「本地召回 20 条 → 去重 12 条 → 精排 top5」。
+
+    stage:    进度阶段名。**建议用 tool.* 前缀**，避免与节点级那 7 个 stage 撞名
+              （撞名会打破 test_researcher_tool_registry.py 的 completed_stages 断言）；
+    message:  给用户看的一句话，例如"本地召回 20 条候选"；
+    progress: 0-100 的百分比；None 表示这一条只有文字、没有进度条；
+    details:  附加结构化信息，例如 {"candidate_count": 20}。
+    """
+
+    stage: str
+    message: str
+    progress: int | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ToolOutcome:
+    """工具的标准返回信封：结果 + 进度回放（S4）。
+
+    向后兼容：工具可以继续返回**裸值**（现有 5 个研究工具就是这么写的），
+    也可以返回 ToolOutcome 来附带进度。
+
+    ⚠️ 关键不变性：拆封发生在 ``ToolRuntime.run()`` 层，所以
+    **节点侧拿到的永远是裸 value**（例如一个 list），
+    不会因为工具改成了 ToolOutcome 而需要改下游遍历逻辑。
+    """
+
+    value: Any = None
+    progress: tuple[ToolProgress, ...] = ()
+
+
 @dataclass
 class ToolRuntimeResult:
     """工具执行结果：成功时带 value，失败时带快照（含错误信息）。"""
@@ -78,6 +120,8 @@ class ToolRuntimeResult:
     ok: bool
     value: Any = None
     run: ToolRunSnapshot | None = None
+    # ★ S4 新增：工具内部攒的进度（裸值返回时为空元组）。带默认值，不破坏现有构造点。
+    progress: tuple[ToolProgress, ...] = ()
 
 
 class ToolRuntime:
@@ -207,7 +251,15 @@ class ToolRuntime:
                         "timeout_seconds": timeout,
                     },
                 )
-                value = self._run_with_timeout(func, timeout, *args, **kwargs)
+                raw = self._run_with_timeout(func, timeout, *args, **kwargs)
+                # ── S4：拆封 ToolOutcome ──
+                # 这一层是"信封"与"裸值"的唯一分界线，拆在这里的原因：
+                #   · 节点侧不用知道进度机制的存在，拿到的仍是 list / str / dict；
+                #   · output_summary 记的是真正的业务结果，而不是信封对象的 str。
+                if isinstance(raw, ToolOutcome):
+                    value, progress = raw.value, raw.progress
+                else:
+                    value, progress = raw, ()
                 finished_at = time.time()
                 base_metadata = metadata or {}
                 snapshot = ToolRunSnapshot(
@@ -245,7 +297,9 @@ class ToolRuntime:
                         "duration_ms": snapshot.duration_ms,
                     },
                 )
-                return ToolRuntimeResult(ok=True, value=value, run=snapshot)
+                return ToolRuntimeResult(
+                    ok=True, value=value, run=snapshot, progress=progress
+                )
             except FutureTimeoutError as exc:
                 # 线程池超时：统一转成业务超时错误（记录原因为超时）
                 last_error = TimeoutError(f"{tool_name} timed out after {timeout}s")
